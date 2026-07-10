@@ -3,7 +3,7 @@ function notFound(req, res, next) {
 }
 
 function errorHandler(err, req, res, next) {
-  console.error(err.stack);
+  console.error(err.stack || err);
   const statusCode = err.statusCode || 500;
   res.status(statusCode).json({
     success: false,

@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,12 +6,278 @@ datasource db {
   provider = "mysql"
 }
 
+enum ChannelKey {
+  hightribe
+  luma
+  eventbrite
+}
+
+enum AuthSource {
+  local
+  hightribe
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  canceled
+  past_due
+}
+
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               BigInt    @id @default(autoincrement()) @db.BigInt
+  email            String    @unique(map: "uniq_users_email") @db.VarChar(320)
+  name             String    @db.VarChar(255)
+  passwordHash     String    @map("password_hash") @db.VarChar(255)
+  authSource       AuthSource @default(local) @map("auth_source")
+  htUserId         String?   @map("ht_user_id") @db.VarChar(64)
+  emailVerifiedAt  DateTime? @map("email_verified_at") @db.DateTime(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  sessions             Session[]
+  passwordResetTokens  PasswordResetToken[]
+  subscription         Subscription?
+  htConnection         HtConnection?
+  userSettings         UserSettings?
+  lumaEvents           LumaEvent[]
+  eventbriteEvents     EventbriteEvent[]
+  hightribeEvents      HightribeEvent[]
+  channelBookings      ChannelBooking[]
 
   @@map("users")
+}
+
+model Session {
+  id        BigInt   @id @default(autoincrement()) @db.BigInt
+  userId    BigInt   @map("user_id") @db.BigInt
+  token     String   @unique(map: "uniq_sessions_token") @db.VarChar(64)
+  expiresAt DateTime @map("expires_at") @db.DateTime(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_sessions_user")
+
+  @@index([userId], map: "idx_sessions_user")
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        BigInt    @id @default(autoincrement()) @db.BigInt
+  userId    BigInt    @map("user_id") @db.BigInt
+  token     String    @unique(map: "uniq_reset_token") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at") @db.DateTime(3)
+  usedAt    DateTime? @map("used_at") @db.DateTime(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_reset_user")
+
+  @@index([userId], map: "idx_reset_user")
+  @@map("password_reset_tokens")
+}
+
+model Subscription {
+  userId               BigInt             @id @map("user_id") @db.BigInt
+  plan                 String             @default("pro_monthly") @db.VarChar(64)
+  status               SubscriptionStatus @default(trialing)
+  trialEndsAt          DateTime?          @map("trial_ends_at") @db.DateTime(3)
+  currentPeriodEnd     DateTime?          @map("current_period_end") @db.DateTime(3)
+  stripeCustomerId     String?            @map("stripe_customer_id") @db.VarChar(255)
+  stripeSubscriptionId String?            @map("stripe_subscription_id") @db.VarChar(255)
+  moneyBackRefundedAt  DateTime?          @map("money_back_refunded_at") @db.DateTime(3)
+  createdAt            DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_subscriptions_user")
+
+  @@index([stripeCustomerId], map: "idx_subscriptions_stripe_customer")
+  @@map("subscriptions")
+}
+
+model HtConnection {
+  userId      BigInt    @id @map("user_id") @db.BigInt
+  htUserId    String?   @map("ht_user_id") @db.VarChar(64)
+  htToken     String?   @map("ht_token") @db.Text
+  connectedAt DateTime? @map("connected_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_ht_connections_user")
+
+  @@map("ht_connections")
+}
+
+model UserSettings {
+  userId       BigInt   @id @map("user_id") @db.BigInt
+  settingsJson Json     @map("settings_json")
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_user_settings_user")
+
+  @@map("user_settings")
+}
+
+model AppSettings {
+  id           Int      @id @default(1) @db.TinyInt
+  settingsJson Json     @map("settings_json")
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@map("app_settings")
+}
+
+model MasterEvent {
+  id        String   @id @db.VarChar(64)
+  userId    BigInt?  @map("user_id") @db.BigInt
+  title     String   @db.VarChar(500)
+  capacity  Int      @default(150)
+  sold      Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  channelRefs ChannelRef[]
+  attendees   Attendee[]
+
+  @@index([userId], map: "idx_master_events_user")
+  @@map("master_events")
+}
+
+model ChannelRef {
+  masterId String     @map("master_id") @db.VarChar(64)
+  channel  ChannelKey
+  eventId  String     @default("") @map("event_id") @db.VarChar(128)
+  ticketId String?    @map("ticket_id") @db.VarChar(128)
+  url      String?    @db.VarChar(500)
+
+  masterEvent MasterEvent @relation(fields: [masterId], references: [id], onDelete: Cascade, map: "fk_channel_refs_master")
+
+  @@id([masterId, channel])
+  @@index([channel, eventId], map: "idx_channel_event")
+  @@map("channel_refs")
+}
+
+model Attendee {
+  id            BigInt     @id @default(autoincrement()) @db.BigInt
+  masterId      String     @map("master_id") @db.VarChar(64)
+  email         String     @db.VarChar(320)
+  name          String     @db.VarChar(500)
+  sourceChannel ChannelKey @map("source_channel")
+  registeredAt  DateTime   @map("registered_at") @db.DateTime(3)
+
+  masterEvent MasterEvent @relation(fields: [masterId], references: [id], onDelete: Cascade, map: "fk_attendees_master")
+
+  @@unique([masterId, email], map: "uniq_master_email")
+  @@map("attendees")
+}
+
+model LumaEvent {
+  id           BigInt    @id @default(autoincrement()) @db.BigInt
+  userId       BigInt    @map("user_id") @db.BigInt
+  externalId   String    @map("external_id") @db.VarChar(128)
+  title        String    @default("") @db.VarChar(500)
+  startAt      DateTime? @map("start_at") @db.DateTime(3)
+  endAt        DateTime? @map("end_at") @db.DateTime(3)
+  timezone     String?   @db.VarChar(64)
+  url          String?   @db.VarChar(500)
+  coverUrl     String?   @map("cover_url") @db.VarChar(500)
+  locationJson Json?     @map("location_json")
+  meetingUrl   String?   @map("meeting_url") @db.VarChar(500)
+  status       String?   @db.VarChar(64)
+  payloadJson  Json      @map("payload_json")
+  syncedAt     DateTime  @map("synced_at") @db.DateTime(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_luma_events_user")
+
+  @@unique([userId, externalId], map: "uniq_luma_user_event")
+  @@index([userId, startAt], map: "idx_luma_user_start")
+  @@map("luma_events")
+}
+
+model EventbriteEvent {
+  id          BigInt    @id @default(autoincrement()) @db.BigInt
+  userId      BigInt    @map("user_id") @db.BigInt
+  externalId  String    @map("external_id") @db.VarChar(128)
+  title       String    @default("") @db.VarChar(500)
+  startAt     DateTime? @map("start_at") @db.DateTime(3)
+  endAt       DateTime? @map("end_at") @db.DateTime(3)
+  timezone    String?   @db.VarChar(64)
+  url         String?   @db.VarChar(500)
+  coverUrl    String?   @map("cover_url") @db.VarChar(500)
+  isFree      Boolean?  @map("is_free")
+  status      String?   @db.VarChar(64)
+  payloadJson Json      @map("payload_json")
+  syncedAt    DateTime  @map("synced_at") @db.DateTime(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_eb_events_user")
+
+  @@unique([userId, externalId], map: "uniq_eb_user_event")
+  @@index([userId, startAt], map: "idx_eb_user_start")
+  @@map("eventbrite_events")
+}
+
+model HightribeEvent {
+  id          BigInt    @id @default(autoincrement()) @db.BigInt
+  userId      BigInt    @map("user_id") @db.BigInt
+  externalId  String    @map("external_id") @db.VarChar(128)
+  title       String    @default("") @db.VarChar(500)
+  startAt     DateTime? @map("start_at") @db.DateTime(3)
+  endAt       DateTime? @map("end_at") @db.DateTime(3)
+  timezone    String?   @db.VarChar(64)
+  url         String?   @db.VarChar(500)
+  coverUrl    String?   @map("cover_url") @db.VarChar(500)
+  location    String?   @db.VarChar(500)
+  status      String?   @db.VarChar(64)
+  payloadJson Json      @map("payload_json")
+  syncedAt    DateTime  @map("synced_at") @db.DateTime(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_ht_events_user")
+
+  @@unique([userId, externalId], map: "uniq_ht_user_event")
+  @@index([userId, startAt], map: "idx_ht_user_start")
+  @@map("hightribe_events")
+}
+
+model ChannelBooking {
+  id               BigInt     @id @default(autoincrement()) @db.BigInt
+  userId           BigInt     @map("user_id") @db.BigInt
+  channel          ChannelKey
+  externalId       String     @map("external_id") @db.VarChar(191)
+  eventExternalId  String?    @map("event_external_id") @db.VarChar(128)
+  eventTitle       String     @default("") @map("event_title") @db.VarChar(500)
+  guestName        String     @default("") @map("guest_name") @db.VarChar(500)
+  guestEmail       String     @map("guest_email") @db.VarChar(320)
+  status           String?    @db.VarChar(64)
+  ticketCount      Int?       @map("ticket_count")
+  registeredAt     DateTime   @map("registered_at") @db.DateTime(3)
+  payloadJson      Json       @map("payload_json")
+  syncedAt         DateTime   @map("synced_at") @db.DateTime(3)
+  createdAt        DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_channel_bookings_user")
+
+  @@unique([userId, channel, externalId], map: "uniq_channel_booking")
+  @@index([userId, channel, registeredAt], map: "idx_bookings_user_channel")
+  @@map("channel_bookings")
+}
+
+model WebhookLog {
+  id           BigInt   @id @default(autoincrement()) @db.BigInt
+  channel      String   @db.VarChar(64)
+  method       String   @default("POST") @db.VarChar(16)
+  path         String   @default("") @db.VarChar(255)
+  statusCode   Int      @map("status_code")
+  outcome      String?  @db.VarChar(64)
+  payloadJson  Json     @map("payload_json")
+  headersJson  Json?    @map("headers_json")
+  responseJson Json?    @map("response_json")
+  errorMessage String?  @map("error_message") @db.Text
+  durationMs   Int?     @map("duration_ms")
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([channel, createdAt], map: "idx_webhook_logs_channel_created")
+  @@index([createdAt], map: "idx_webhook_logs_created")
+  @@map("webhook_logs")
 }
