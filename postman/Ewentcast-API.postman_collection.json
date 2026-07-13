@@ -1,8 +1,8 @@
 {
   "info": {
-    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "name": "Ewentcast API",
-    "description": "Express + Prisma API for Luma, Eventbrite, Hightribe channels.\\n\\n**Auth:** Prefer `Authorization: Bearer {{authToken}}` after login/register. `x-user-id` still works for legacy calls.\\n\\n**Base:** `{{baseUrl}}/api/v1`\\n\\n**Local domain:** http://api.ewentcast.test",
+    "_postman_id": "7225f527-33bb-44e6-ab00-c7bae7fb16ee",
+    "name": "Ewentcast API — Auth + Channels",
+    "description": "Login/Register auto-saves {{authToken}}. Collection Authorization = Bearer Token {{authToken}}. Use Inherit auth from parent on Me and other protected requests. Flow: Login → Me.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -64,11 +64,15 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (pm.response.code === 201 || pm.response.code === 200) {",
-                  "  const j = pm.response.json();",
-                  "  if (j.token) pm.collectionVariables.set('authToken', j.token);",
-                  "  if (j.user && j.user.id) pm.collectionVariables.set('userId', String(j.user.id));",
-                  "  if (j.verifyToken) pm.collectionVariables.set('verifyToken', j.verifyToken);",
+                  "const j = pm.response.json();",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  if (j.token) {",
+                  "    pm.collectionVariables.set(\"authToken\", j.token);",
+                  "    console.log(\"authToken updated\");",
+                  "  }",
+                  "  if (j.user && j.user.id) pm.collectionVariables.set(\"userId\", String(j.user.id));",
+                  "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
+                  "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
                   "}"
                 ]
               }
@@ -87,7 +91,10 @@
               "raw": "{\n  \"name\": \"Demo User\",\n  \"email\": \"{{authEmail}}\",\n  \"password\": \"{{authPassword}}\"\n}"
             },
             "url": "{{baseUrl}}/api/v1/auth/register",
-            "description": "Creates user + trial subscription + session. Saves authToken + verifyToken."
+            "description": "Creates user + trial subscription + session. Saves authToken + verifyToken.",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
@@ -98,10 +105,15 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (pm.response.code === 200) {",
-                  "  const j = pm.response.json();",
-                  "  if (j.token) pm.collectionVariables.set('authToken', j.token);",
-                  "  if (j.user && j.user.id) pm.collectionVariables.set('userId', String(j.user.id));",
+                  "const j = pm.response.json();",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  if (j.token) {",
+                  "    pm.collectionVariables.set(\"authToken\", j.token);",
+                  "    console.log(\"authToken updated\");",
+                  "  }",
+                  "  if (j.user && j.user.id) pm.collectionVariables.set(\"userId\", String(j.user.id));",
+                  "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
+                  "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
                   "}"
                 ]
               }
@@ -119,19 +131,17 @@
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{authEmail}}\",\n  \"password\": \"{{authPassword}}\"\n}"
             },
-            "url": "{{baseUrl}}/api/v1/auth/login"
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
           "name": "Me",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{authToken}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/auth/me"
           }
         },
@@ -145,7 +155,7 @@
                 "exec": [
                   "if (pm.response.code === 200) {",
                   "  const j = pm.response.json();",
-                  "  if (j.verifyToken) pm.collectionVariables.set('verifyToken', j.verifyToken);",
+                  "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
                   "}"
                 ]
               }
@@ -163,7 +173,10 @@
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{authEmail}}\"\n}"
             },
-            "url": "{{baseUrl}}/api/v1/auth/resend-verification"
+            "url": "{{baseUrl}}/api/v1/auth/resend-verification",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
@@ -180,7 +193,10 @@
               "mode": "raw",
               "raw": "{\n  \"token\": \"{{verifyToken}}\"\n}"
             },
-            "url": "{{baseUrl}}/api/v1/auth/verify-email"
+            "url": "{{baseUrl}}/api/v1/auth/verify-email",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
@@ -188,7 +204,10 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/v1/auth/verify-email?token={{verifyToken}}"
+            "url": "{{baseUrl}}/api/v1/auth/verify-email?token={{verifyToken}}",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
@@ -201,7 +220,7 @@
                 "exec": [
                   "if (pm.response.code === 200) {",
                   "  const j = pm.response.json();",
-                  "  if (j.resetToken) pm.collectionVariables.set('resetToken', j.resetToken);",
+                  "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
                   "}"
                 ]
               }
@@ -220,7 +239,10 @@
               "raw": "{\n  \"email\": \"{{authEmail}}\"\n}"
             },
             "url": "{{baseUrl}}/api/v1/auth/forgot-password",
-            "description": "In non-production returns resetToken for testing."
+            "description": "In non-production returns resetToken for testing.",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
@@ -237,23 +259,24 @@
               "mode": "raw",
               "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"password\": \"Password123!\"\n}"
             },
-            "url": "{{baseUrl}}/api/v1/auth/reset-password"
+            "url": "{{baseUrl}}/api/v1/auth/reset-password",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
           "name": "Logout",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{authToken}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/auth/logout"
           }
         }
-      ]
+      ],
+      "auth": {
+        "type": "noauth"
+      }
     },
     {
       "name": "Health",
@@ -264,7 +287,10 @@
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/",
-            "description": "API root — confirms domain proxy is working"
+            "description": "API root — confirms domain proxy is working",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
@@ -273,7 +299,10 @@
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/api/v1/health",
-            "description": "API health check"
+            "description": "API health check",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [
             {
@@ -315,12 +344,7 @@
           "name": "Get Settings (masked)",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/settings"
           }
         },
@@ -328,12 +352,7 @@
           "name": "Get Settings (full)",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/settings?full=1",
               "host": [
@@ -359,10 +378,6 @@
             "method": "PUT",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -380,10 +395,6 @@
             "method": "PUT",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -399,12 +410,7 @@
           "name": "Clear Channel Settings",
           "request": {
             "method": "DELETE",
-            "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/settings/{{channel}}"
           }
         }
@@ -417,12 +423,7 @@
           "name": "List Luma Events",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/events/luma"
           }
         },
@@ -430,12 +431,7 @@
           "name": "List Eventbrite Events",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/events/eventbrite"
           }
         },
@@ -443,12 +439,7 @@
           "name": "List Hightribe Events",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/events/hightribe"
           }
         },
@@ -456,12 +447,7 @@
           "name": "Get Event By External ID",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/events/{{channel}}/{{externalId}}"
           }
         },
@@ -469,12 +455,7 @@
           "name": "List All Bookings",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/events/bookings"
           }
         }
@@ -488,10 +469,6 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
@@ -511,10 +488,6 @@
             "method": "POST",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -531,10 +504,6 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
@@ -554,10 +523,6 @@
             "method": "POST",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -574,10 +539,6 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
@@ -596,10 +557,6 @@
             "method": "POST",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -616,10 +573,6 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
@@ -638,10 +591,6 @@
             "method": "POST",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -659,10 +608,6 @@
             "method": "POST",
             "header": [
               {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -678,12 +623,7 @@
           "name": "Delete One Event",
           "request": {
             "method": "DELETE",
-            "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/events/{{channel}}/{{externalId}}"
           }
         },
@@ -691,12 +631,7 @@
           "name": "Purge Channel Data",
           "request": {
             "method": "DELETE",
-            "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/events/{{channel}}",
             "description": "Deletes all events + bookings + registry links for the channel."
           }
@@ -766,7 +701,10 @@
               "mode": "raw",
               "raw": "{\n  \"type\": \"guest.registered\",\n  \"guest\": {\n    \"api_id\": \"gst-abc123\",\n    \"event_api_id\": \"evt-sample-001\",\n    \"email\": \"webhook.guest@example.com\",\n    \"name\": \"Webhook Guest\",\n    \"user_email\": \"webhook.guest@example.com\",\n    \"user_name\": \"Webhook Guest\",\n    \"approval_status\": \"approved\",\n    \"registered_at\": \"2026-07-10T12:00:00.000Z\"\n  }\n}"
             },
-            "url": "{{baseUrl}}/api/v1/webhooks/luma"
+            "url": "{{baseUrl}}/api/v1/webhooks/luma",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
@@ -783,7 +721,10 @@
               "mode": "raw",
               "raw": "{\n  \"type\": \"event.updated\",\n  \"data\": {\n    \"id\": \"evt-sample-001\",\n    \"name\": \"Sunset Yoga on the Beach\",\n    \"url\": \"https://lu.ma/sunset-yoga\"\n  }\n}"
             },
-            "url": "{{baseUrl}}/api/v1/webhooks/luma"
+            "url": "{{baseUrl}}/api/v1/webhooks/luma",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
@@ -800,7 +741,10 @@
               "mode": "raw",
               "raw": "{\n  \"config\": {\n    \"action\": \"test\"\n  }\n}"
             },
-            "url": "{{baseUrl}}/api/v1/webhooks/eventbrite"
+            "url": "{{baseUrl}}/api/v1/webhooks/eventbrite",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
@@ -817,7 +761,10 @@
               "mode": "raw",
               "raw": "{\n  \"config\": {\n    \"action\": \"attendee.updated\"\n  },\n  \"api_url\": \"https://www.eventbriteapi.com/v3/events/12345678901/attendees/999/\",\n  \"attendee\": {\n    \"id\": \"999\",\n    \"event_id\": \"12345678901\",\n    \"status\": \"Attending\",\n    \"profile\": {\n      \"name\": \"EB Webhook User\",\n      \"email\": \"eb.webhook@example.com\",\n      \"first_name\": \"EB\",\n      \"last_name\": \"Webhook\"\n    }\n  }\n}"
             },
-            "url": "{{baseUrl}}/api/v1/webhooks/eventbrite"
+            "url": "{{baseUrl}}/api/v1/webhooks/eventbrite",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
@@ -839,7 +786,10 @@
               "mode": "raw",
               "raw": "{\n  \"event_id\": \"ht-evt-100\",\n  \"email\": \"ht.webhook@example.com\",\n  \"name\": \"HT Webhook Guest\",\n  \"booking_id\": \"ht-bk-501\",\n  \"registered_at\": \"2026-07-10T14:30:00.000Z\",\n  \"status\": \"confirmed\"\n}"
             },
-            "url": "{{baseUrl}}/api/v1/webhooks/hightribe"
+            "url": "{{baseUrl}}/api/v1/webhooks/hightribe",
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
@@ -847,7 +797,10 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/v1/webhooks/hightribe"
+            "url": "{{baseUrl}}/api/v1/webhooks/hightribe",
+            "auth": {
+              "type": "noauth"
+            }
           }
         }
       ]
@@ -859,12 +812,7 @@
           "name": "Get Webhook Setup Info",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/v1/webhooks/setup"
           }
         },
@@ -873,10 +821,6 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "x-user-id",
-                "value": "{{userId}}"
-              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
@@ -918,10 +862,23 @@
                 }
               ]
             },
-            "description": "Set WEBHOOK_LOG_TOKEN in .env to match {{webhookLogToken}}."
+            "description": "Set WEBHOOK_LOG_TOKEN in .env to match {{webhookLogToken}}.",
+            "auth": {
+              "type": "noauth"
+            }
           }
         }
       ]
     }
-  ]
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  }
 }
