@@ -1,5 +1,5 @@
 const express = require("express");
-const { requireUserId } = require("../middlewares/requireUserId");
+const { requireAuth } = require("../middlewares/requireAuth");
 const {
   listBookings,
   listEvents,
@@ -13,7 +13,7 @@ const {
 
 const router = express.Router();
 
-router.use(requireUserId);
+router.use(requireAuth);
 
 router.get("/bookings", listBookings);
 router.post("/:channel/sync", syncEvents);

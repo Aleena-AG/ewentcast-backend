@@ -1,4 +1,5 @@
 const express = require("express");
+const { requireAuth } = require("../middlewares/requireAuth");
 const {
   listMasterEvents,
   getMasterEvent,
@@ -7,6 +8,8 @@ const {
 } = require("../controllers/registry.controller");
 
 const router = express.Router();
+
+router.use(requireAuth);
 
 router.get("/", listMasterEvents);
 router.post("/", createMasterEvent);

@@ -1,5 +1,5 @@
 const express = require("express");
-const { requireUserId } = require("../middlewares/requireUserId");
+const { requireAuth } = require("../middlewares/requireAuth");
 const {
   getSettings,
   putSettings,
@@ -8,7 +8,7 @@ const {
 
 const router = express.Router();
 
-router.use(requireUserId);
+router.use(requireAuth);
 
 router.get("/", getSettings);
 router.put("/", putSettings);

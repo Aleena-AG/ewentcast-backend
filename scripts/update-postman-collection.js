@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 const apiKey = process.env.POSTMAN_API_KEY;
-const collectionUid = "17385817-7225f527-33bb-44e6-ab00-c7bae7fb16ee";
+const collectionUid = "17385817-e0f287ad-1766-4deb-b622-ddfbf6597e8a";
 
 if (!apiKey) {
   console.error("POSTMAN_API_KEY missing");
@@ -17,38 +17,54 @@ const local = JSON.parse(
   )
 );
 
-// Keep Postman cloud id stable if present
-if (!local.info) local.info = {};
-local.info._postman_id = "7225f527-33bb-44e6-ab00-c7bae7fb16ee";
-local.info.name = local.info.name || "Ewentcast API";
+local.info = local.info || {};
+local.info._postman_id = "e0f287ad-1766-4deb-b622-ddfbf6597e8a";
+local.info.name = "Ewentcast API — Auth + Channels";
+local.info.schema =
+  local.info.schema ||
+  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json";
 
 async function main() {
-  const res = await fetch(`https://api.getpostman.com/collections/${collectionUid}`, {
-    method: "PUT",
-    headers: {
-      "X-Api-Key": apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ collection: local }),
-  });
+  const putRes = await fetch(
+    `https://api.getpostman.com/collections/${collectionUid}`,
+    {
+      method: "PUT",
+      headers: {
+        "X-Api-Key": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ collection: local }),
+    }
+  );
 
-  const text = await res.text();
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = { raw: text };
-  }
-
-  if (!res.ok) {
-    console.error("FAILED", res.status, JSON.stringify(data).slice(0, 1000));
+  console.log("PUT", putRes.status);
+  if (!putRes.ok) {
+    console.error(await putRes.text());
     process.exit(1);
   }
 
-  const vars = (data.collection?.variable || []).filter((v) => v.key === "baseUrl");
-  console.log("UPDATED:", data.collection?.info?.name);
-  console.log("UID:", data.collection?.info?.uid);
-  console.log("baseUrl:", vars[0]?.value || "(missing)");
+  // Verify with GET (PUT response shape is unreliable)
+  const getRes = await fetch(
+    `https://api.getpostman.com/collections/${collectionUid}`,
+    { headers: { "X-Api-Key": apiKey } }
+  );
+  const data = await getRes.json();
+  const folders = (data.collection?.item || []).map((i) => i.name);
+  const auth = (data.collection?.item || []).find((i) => i.name === "Auth");
+  const authReqs = (auth?.item || []).map((i) => i.name);
+
+  console.log("name:", data.collection?.info?.name);
+  console.log("folders:", folders.join(" | "));
+  console.log("Auth:", authReqs.join(", ") || "MISSING");
+  console.log(
+    "description starts:",
+    String(data.collection?.info?.description || "").slice(0, 80)
+  );
+
+  if (!auth || authReqs.length < 9) {
+    console.error("Auth folder incomplete after update");
+    process.exit(1);
+  }
 }
 
 main().catch((e) => {

@@ -5,6 +5,7 @@ const crypto = require("crypto");
 async function listMasterEvents(req, res, next) {
   try {
     const events = await prisma.masterEvent.findMany({
+      where: { userId: req.userId },
       include: { channelRefs: true, attendees: true },
       orderBy: { updatedAt: "desc" },
     });
@@ -16,8 +17,8 @@ async function listMasterEvents(req, res, next) {
 
 async function getMasterEvent(req, res, next) {
   try {
-    const event = await prisma.masterEvent.findUnique({
-      where: { id: req.params.id },
+    const event = await prisma.masterEvent.findFirst({
+      where: { id: req.params.id, userId: req.userId },
       include: { channelRefs: true, attendees: true },
     });
 
@@ -33,7 +34,7 @@ async function getMasterEvent(req, res, next) {
 
 async function createMasterEvent(req, res, next) {
   try {
-    const { title, capacity = 150, userId, channelRefs = [] } = req.body;
+    const { title, capacity = 150, channelRefs = [] } = req.body;
 
     if (!title) {
       return res.status(400).json({ success: false, message: "title is required" });
@@ -44,7 +45,7 @@ async function createMasterEvent(req, res, next) {
         id: crypto.randomUUID().replace(/-/g, "").slice(0, 64),
         title,
         capacity,
-        userId: userId ? BigInt(userId) : null,
+        userId: req.userId,
         channelRefs: channelRefs.length
           ? {
               create: channelRefs.map((ref) => ({
@@ -67,6 +68,14 @@ async function createMasterEvent(req, res, next) {
 
 async function listAttendees(req, res, next) {
   try {
+    const master = await prisma.masterEvent.findFirst({
+      where: { id: req.params.id, userId: req.userId },
+      select: { id: true },
+    });
+    if (!master) {
+      return res.status(404).json({ success: false, message: "Master event not found" });
+    }
+
     const attendees = await prisma.attendee.findMany({
       where: { masterId: req.params.id },
       orderBy: { registeredAt: "desc" },

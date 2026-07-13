@@ -1,5 +1,5 @@
 const express = require("express");
-const { requireUserId } = require("../middlewares/requireUserId");
+const { requireAuth } = require("../middlewares/requireAuth");
 const {
   lumaWebhook,
   eventbriteWebhook,
@@ -12,15 +12,15 @@ const {
 
 const router = express.Router();
 
-// Public inbound webhooks (no user auth — channels call these)
+// Public inbound webhooks (channels call these — no user Bearer)
 router.post("/luma", lumaWebhook);
 router.post("/eventbrite", eventbriteWebhook);
 router.post("/hightribe", hightribeWebhook);
 router.get("/hightribe", hightribeWebhookInfo);
 
-// Setup + logs
-router.get("/setup", requireUserId, getSetup);
-router.post("/setup", requireUserId, postSetup);
+// Authenticated setup + ops
+router.get("/setup", requireAuth, getSetup);
+router.post("/setup", requireAuth, postSetup);
 router.get("/logs", getLogs);
 
 module.exports = router;
