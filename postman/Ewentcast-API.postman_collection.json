@@ -2,21 +2,271 @@
   "info": {
     "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "name": "Ewentcast API",
-    "description": "Express + Prisma API for Luma, Eventbrite, Hightribe channels.\n\n**Auth:** Most routes need header `x-user-id` (dev user id).\n\n**Base:** `{{baseUrl}}/api/v1`",
+    "description": "Express + Prisma API for Luma, Eventbrite, Hightribe channels.\\n\\n**Auth:** Prefer `Authorization: Bearer {{authToken}}` after login/register. `x-user-id` still works for legacy calls.\\n\\n**Base:** `{{baseUrl}}/api/v1`\\n\\n**Local domain:** http://api.ewentcast.test",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:5000" },
-    { "key": "userId", "value": "1" },
-    { "key": "channel", "value": "luma" },
-    { "key": "externalId", "value": "evt-sample-001" },
-    { "key": "masterId", "value": "mst_sample" },
-    { "key": "webhookLogToken", "value": "change-me" }
+    {
+      "key": "baseUrl",
+      "value": "http://api.ewentcast.test"
+    },
+    {
+      "key": "userId",
+      "value": "1"
+    },
+    {
+      "key": "channel",
+      "value": "luma"
+    },
+    {
+      "key": "externalId",
+      "value": "evt-sample-001"
+    },
+    {
+      "key": "masterId",
+      "value": "mst_sample"
+    },
+    {
+      "key": "webhookLogToken",
+      "value": "change-me"
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    },
+    {
+      "key": "resetToken",
+      "value": ""
+    },
+    {
+      "key": "verifyToken",
+      "value": ""
+    },
+    {
+      "key": "authEmail",
+      "value": "demo@ewentcast.test"
+    },
+    {
+      "key": "authPassword",
+      "value": "Password123!"
+    }
   ],
   "item": [
     {
+      "name": "Auth",
+      "description": "Full auth flow: register → verify email → login → me → forgot → reset → logout",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  const j = pm.response.json();",
+                  "  if (j.token) pm.collectionVariables.set('authToken', j.token);",
+                  "  if (j.user && j.user.id) pm.collectionVariables.set('userId', String(j.user.id));",
+                  "  if (j.verifyToken) pm.collectionVariables.set('verifyToken', j.verifyToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo User\",\n  \"email\": \"{{authEmail}}\",\n  \"password\": \"{{authPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/register",
+            "description": "Creates user + trial subscription + session. Saves authToken + verifyToken."
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const j = pm.response.json();",
+                  "  if (j.token) pm.collectionVariables.set('authToken', j.token);",
+                  "  if (j.user && j.user.id) pm.collectionVariables.set('userId', String(j.user.id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{authEmail}}\",\n  \"password\": \"{{authPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          }
+        },
+        {
+          "name": "Resend Verification Email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const j = pm.response.json();",
+                  "  if (j.verifyToken) pm.collectionVariables.set('verifyToken', j.verifyToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{authEmail}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/resend-verification"
+          }
+        },
+        {
+          "name": "Verify Email (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verifyToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/verify-email"
+          }
+        },
+        {
+          "name": "Verify Email (GET link)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/verify-email?token={{verifyToken}}"
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const j = pm.response.json();",
+                  "  if (j.resetToken) pm.collectionVariables.set('resetToken', j.resetToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{authEmail}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/forgot-password",
+            "description": "In non-production returns resetToken for testing."
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/reset-password"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/logout"
+          }
+        }
+      ]
+    },
+    {
       "name": "Health",
       "item": [
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/",
+            "description": "API root — confirms domain proxy is working"
+          }
+        },
         {
           "name": "Health Check",
           "request": {
@@ -66,7 +316,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              }
             ],
             "url": "{{baseUrl}}/api/v1/settings"
           }
@@ -76,13 +329,27 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/settings?full=1",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "settings"],
-              "query": [{ "key": "full", "value": "1" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings"
+              ],
+              "query": [
+                {
+                  "key": "full",
+                  "value": "1"
+                }
+              ]
             }
           }
         },
@@ -91,12 +358,18 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"luma\": {\n    \"apiKey\": \"luma_live_xxxxxxxxxxxxxxxx\",\n    \"calendarId\": \"cal-xxxxx\",\n    \"apiBaseUrl\": \"https://public-api.luma.com\",\n    \"discoverBaseUrl\": \"https://api.lu.ma\"\n  },\n  \"eventbrite\": {\n    \"clientId\": \"your-eb-client-id\",\n    \"clientSecret\": \"your-eb-client-secret\",\n    \"redirectUri\": \"http://localhost:5000/api/v1/eventbrite/callback\",\n    \"privateToken\": \"EBXXXXXXXXXXXXXXXX\",\n    \"publicToken\": \"\"\n  },\n  \"hightribe\": {\n    \"serviceUrl\": \"https://api.hightribe.com\",\n    \"apiKey\": \"\",\n    \"webhookSecret\": \"ht-webhook-secret-change-me\"\n  }\n}"
+              "raw": "{\n  \"luma\": {\n    \"apiKey\": \"luma_live_xxxxxxxxxxxxxxxx\",\n    \"calendarId\": \"cal-xxxxx\",\n    \"apiBaseUrl\": \"https://public-api.luma.com\",\n    \"discoverBaseUrl\": \"https://api.lu.ma\"\n  },\n  \"eventbrite\": {\n    \"clientId\": \"your-eb-client-id\",\n    \"clientSecret\": \"your-eb-client-secret\",\n    \"redirectUri\": \"http://api.ewentcast.test/api/v1/eventbrite/callback\",\n    \"privateToken\": \"EBXXXXXXXXXXXXXXXX\",\n    \"publicToken\": \"\"\n  },\n  \"hightribe\": {\n    \"serviceUrl\": \"https://api.hightribe.com\",\n    \"apiKey\": \"\",\n    \"webhookSecret\": \"ht-webhook-secret-change-me\"\n  }\n}"
             },
             "url": "{{baseUrl}}/api/v1/settings"
           }
@@ -106,8 +379,14 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -121,7 +400,10 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              }
             ],
             "url": "{{baseUrl}}/api/v1/settings/{{channel}}"
           }
@@ -136,7 +418,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              }
             ],
             "url": "{{baseUrl}}/api/v1/events/luma"
           }
@@ -146,7 +431,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              }
             ],
             "url": "{{baseUrl}}/api/v1/events/eventbrite"
           }
@@ -156,7 +444,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              }
             ],
             "url": "{{baseUrl}}/api/v1/events/hightribe"
           }
@@ -166,7 +457,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              }
             ],
             "url": "{{baseUrl}}/api/v1/events/{{channel}}/{{externalId}}"
           }
@@ -176,7 +470,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              }
             ],
             "url": "{{baseUrl}}/api/v1/events/bookings"
           }
@@ -191,8 +488,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -207,8 +510,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -222,8 +531,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -238,8 +553,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -253,8 +574,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -268,8 +595,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -283,8 +616,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -298,8 +637,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -313,8 +658,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -328,7 +679,10 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              }
             ],
             "url": "{{baseUrl}}/api/v1/events/{{channel}}/{{externalId}}"
           }
@@ -338,7 +692,10 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              }
             ],
             "url": "{{baseUrl}}/api/v1/events/{{channel}}",
             "description": "Deletes all events + bookings + registry links for the channel."
@@ -362,7 +719,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -397,7 +757,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -411,7 +774,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -425,7 +791,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -439,7 +808,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -453,8 +825,15 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-Webhook-Secret", "value": "ht-webhook-secret-change-me", "description": "Required only if secret is set in settings/env" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Webhook-Secret",
+                "value": "ht-webhook-secret-change-me",
+                "description": "Required only if secret is set in settings/env"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -481,7 +860,10 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              }
             ],
             "url": "{{baseUrl}}/api/v1/webhooks/setup"
           }
@@ -491,8 +873,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-user-id", "value": "{{userId}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "x-user-id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -507,13 +895,28 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-webhook-log-token", "value": "{{webhookLogToken}}" }
+              {
+                "key": "x-webhook-log-token",
+                "value": "{{webhookLogToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/webhooks/logs?limit=50",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "webhooks", "logs"],
-              "query": [{ "key": "limit", "value": "50" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
             },
             "description": "Set WEBHOOK_LOG_TOKEN in .env to match {{webhookLogToken}}."
           }

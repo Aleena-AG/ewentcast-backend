@@ -1,21 +1,31 @@
-function requireUserId(req, res, next) {
-  const raw =
-    req.headers["x-user-id"] ||
-    req.query.userId ||
-    req.body?.userId;
+const { resolveSession } = require("../services/auth.service");
 
-  if (!raw) {
-    return res.status(401).json({
-      success: false,
-      message: "userId required (header x-user-id, query userId, or body userId)",
-    });
-  }
-
+async function requireUserId(req, res, next) {
   try {
+    const header = req.headers.authorization;
+    if (header) {
+      const user = await resolveSession(header);
+      if (user) {
+        req.user = user;
+        req.userId = user.id;
+        req.sessionToken = header.startsWith("Bearer ") ? header.slice(7) : header;
+        return next();
+      }
+    }
+
+    const raw = req.headers["x-user-id"] || req.query.userId || req.body?.userId;
+    if (!raw) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Auth required (Authorization: Bearer <token> or header x-user-id)",
+      });
+    }
+
     req.userId = BigInt(raw);
-    next();
+    return next();
   } catch {
-    return res.status(400).json({ success: false, message: "invalid userId" });
+    return res.status(400).json({ success: false, message: "invalid auth / userId" });
   }
 }
 
