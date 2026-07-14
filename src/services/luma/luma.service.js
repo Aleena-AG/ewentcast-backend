@@ -219,9 +219,15 @@ async function fetchBookingsForSync(settings, events) {
   return bookings;
 }
 
+async function createEvent(settings, body) {
+  // Luma public API create endpoint
+  return lumaRequest(settings, "POST", "/v1/event/create", { body });
+}
+
 module.exports = {
   LumaApiError,
   lumaRequest,
+  createEvent,
   listHostedEvents,
   listEventGuests,
   fetchEventsForSync,

@@ -17,8 +17,9 @@ function getToken(settings) {
   return token;
 }
 
-async function ebRequest(settings, path, query = {}) {
+async function ebRequest(settings, path, query = {}, opts = {}) {
   const token = getToken(settings);
+  const method = opts.method || "GET";
   const url = new URL(`https://www.eventbriteapi.com/v3/${path.replace(/^\//, "")}`);
   if (!url.pathname.endsWith("/")) {
     url.pathname = `${url.pathname}/`;
@@ -27,12 +28,19 @@ async function ebRequest(settings, path, query = {}) {
     if (v !== undefined && v !== "") url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString(), {
+  const init = {
+    method,
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
     },
-  });
+  };
+  if (opts.body != null && method !== "GET" && method !== "HEAD") {
+    init.headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(opts.body);
+  }
+
+  const res = await fetch(url.toString(), init);
   const text = await res.text();
   let data = {};
   try {
@@ -47,6 +55,14 @@ async function ebRequest(settings, path, query = {}) {
     );
   }
   return data;
+}
+
+async function listOrganizations(settings) {
+  return ebRequest(settings, "users/me/organizations");
+}
+
+async function createOrganizationEvent(settings, orgId, body) {
+  return ebRequest(settings, `organizations/${orgId}/events`, {}, { method: "POST", body });
 }
 
 async function fetchEventsForSync(settings) {
@@ -130,6 +146,8 @@ async function fetchBookingsForSync(settings, events) {
 module.exports = {
   EventbriteApiError,
   ebRequest,
+  listOrganizations,
+  createOrganizationEvent,
   fetchEventsForSync,
   fetchBookingsForSync,
 };

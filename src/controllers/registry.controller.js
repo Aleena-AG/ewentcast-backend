@@ -2,6 +2,13 @@ const prisma = require("../config/db");
 const { serialize } = require("../utils/serialize");
 const crypto = require("crypto");
 const { parseChannel } = require("../services/channels/helpers");
+const {
+  deleteMasterEvent,
+  linkChannel,
+  unlinkChannel,
+  registerAttendee,
+  registerAttendeeByChannel,
+} = require("../services/registry.service");
 
 const MASTER_INCLUDE = { channelRefs: true, attendees: true };
 
@@ -95,7 +102,10 @@ async function updateMasterEvent(req, res, next) {
       return res.status(400).json({ success: false, message: "title cannot be empty" });
     }
     if (capacity !== undefined && (Number.isNaN(Number(capacity)) || Number(capacity) < 0)) {
-      return res.status(400).json({ success: false, message: "capacity must be a non-negative number" });
+      return res.status(400).json({
+        success: false,
+        message: "capacity must be a non-negative number",
+      });
     }
 
     const data = {};
@@ -137,6 +147,56 @@ async function updateMasterEvent(req, res, next) {
   }
 }
 
+async function removeMasterEvent(req, res, next) {
+  try {
+    const ok = await deleteMasterEvent(req.params.id, req.userId);
+    if (!ok) {
+      return res.status(404).json({ success: false, message: "Master event not found" });
+    }
+    res.json({ success: true, message: "Master event deleted" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function linkChannelRef(req, res, next) {
+  try {
+    const body = req.body || {};
+    const channel = body.channel;
+    const ref = body.ref || body;
+    if (!channel && !ref.channel) {
+      return res.status(400).json({ success: false, message: "channel is required" });
+    }
+
+    const master = await linkChannel(req.params.id, req.userId, {
+      channel: channel || ref.channel,
+      eventId: ref.eventId ?? body.eventId,
+      ticketId: ref.ticketId ?? body.ticketId,
+      url: ref.url ?? body.url,
+    });
+
+    if (!master) {
+      return res.status(404).json({ success: false, message: "Master event not found" });
+    }
+
+    res.status(201).json({ success: true, data: serialize(master) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function unlinkChannelRef(req, res, next) {
+  try {
+    const master = await unlinkChannel(req.params.id, req.userId, req.params.channel);
+    if (!master) {
+      return res.status(404).json({ success: false, message: "Master event not found" });
+    }
+    res.json({ success: true, data: serialize(master) });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function listAttendees(req, res, next) {
   try {
     const master = await prisma.masterEvent.findFirst({
@@ -157,10 +217,80 @@ async function listAttendees(req, res, next) {
   }
 }
 
+async function createAttendee(req, res, next) {
+  try {
+    const master = await prisma.masterEvent.findFirst({
+      where: { id: req.params.id, userId: req.userId },
+      select: { id: true },
+    });
+    if (!master) {
+      return res.status(404).json({ success: false, message: "Master event not found" });
+    }
+
+    const { email, name, source, registeredAt } = req.body || {};
+    if (!email || !name || !source) {
+      return res.status(422).json({
+        success: false,
+        message: "email, name, and source are required",
+      });
+    }
+    if (!parseChannel(source)) {
+      return res.status(400).json({ success: false, message: "invalid source channel" });
+    }
+
+    const data = await registerAttendee(req.params.id, {
+      email,
+      name,
+      source,
+      registeredAt,
+    });
+    res.status(201).json({ success: true, data: serialize(data) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function createAttendeeByChannel(req, res, next) {
+  try {
+    const { channel, eventId, email, name, registeredAt, status } = req.body || {};
+    if (!channel || !eventId || !email) {
+      return res.status(422).json({
+        success: false,
+        message: "channel, eventId, and email are required",
+      });
+    }
+
+    const data = await registerAttendeeByChannel({
+      channel,
+      eventId,
+      email,
+      name,
+      registeredAt,
+      status,
+    });
+
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: "No master event linked to this channel event",
+      });
+    }
+
+    res.status(201).json({ success: true, data: serialize(data) });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   listMasterEvents,
   getMasterEvent,
   createMasterEvent,
   updateMasterEvent,
+  removeMasterEvent,
+  linkChannelRef,
+  unlinkChannelRef,
   listAttendees,
+  createAttendee,
+  createAttendeeByChannel,
 };

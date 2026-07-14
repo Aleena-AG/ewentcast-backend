@@ -26,19 +26,46 @@ async function resolveHtAuth(userId) {
   return { base, token, settings, connection };
 }
 
-async function htRequest(userId, path, query = {}) {
+function normalizeHtTicketFlags(body) {
+  if (!body || typeof body !== "object") return body;
+  const out = { ...body };
+  if (Array.isArray(out.tickets)) {
+    out.tickets = out.tickets.map((t) => {
+      if (!t || typeof t !== "object") return t;
+      const ticket = { ...t };
+      if (typeof ticket.show_ticket === "boolean") {
+        ticket.show_ticket = ticket.show_ticket ? 1 : 0;
+      }
+      if (typeof ticket.show_ticket_quantity === "boolean") {
+        ticket.show_ticket_quantity = ticket.show_ticket_quantity ? 1 : 0;
+      }
+      return ticket;
+    });
+  }
+  return out;
+}
+
+async function htRequest(userId, path, query = {}, opts = {}) {
   const { base, token } = await resolveHtAuth(userId);
+  const method = opts.method || "GET";
   const url = new URL(`${base}/api/${path.replace(/^\//, "")}`);
   for (const [k, v] of Object.entries(query)) {
     if (v !== undefined && v !== "") url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString(), {
+  const init = {
+    method,
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
+      "Content-Type": "application/json",
     },
-  });
+  };
+  if (opts.body != null && method !== "GET" && method !== "HEAD") {
+    init.body = JSON.stringify(opts.body);
+  }
+
+  const res = await fetch(url.toString(), init);
   const text = await res.text();
   let data = {};
   try {
@@ -53,6 +80,19 @@ async function htRequest(userId, path, query = {}) {
     );
   }
   return data;
+}
+
+async function createEvent(userId, body) {
+  return htRequest(userId, "events", {}, { method: "POST", body });
+}
+
+async function createEventWithTickets(userId, body) {
+  return htRequest(
+    userId,
+    "events/with-tickets",
+    {},
+    { method: "POST", body: normalizeHtTicketFlags(body) }
+  );
 }
 
 async function fetchEventsPage(userId, page = 1, perPage = 50) {
@@ -138,6 +178,8 @@ async function fetchBookingsForSync(userId) {
 module.exports = {
   HightribeApiError,
   htRequest,
+  createEvent,
+  createEventWithTickets,
   fetchEventsPage,
   fetchBookingsPage,
   fetchEventsForSync,

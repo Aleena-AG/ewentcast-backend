@@ -6,6 +6,9 @@ const registryRoutes = require("./registry.routes");
 const eventsRoutes = require("./events.routes");
 const settingsRoutes = require("./settings.routes");
 const webhooksRoutes = require("./webhooks.routes");
+const lumaRoutes = require("./luma.routes");
+const hightribeRoutes = require("./hightribe.routes");
+const eventbriteRoutes = require("./eventbrite.routes");
 
 const router = express.Router();
 
@@ -16,5 +19,8 @@ router.use("/registry", registryRoutes);
 router.use("/events", eventsRoutes);
 router.use("/settings", settingsRoutes);
 router.use("/webhooks", webhooksRoutes);
+router.use("/luma", lumaRoutes);
+router.use("/hightribe", hightribeRoutes);
+router.use("/eventbrite", eventbriteRoutes);
 
 module.exports = router;
