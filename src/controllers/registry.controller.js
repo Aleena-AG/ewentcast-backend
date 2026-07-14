@@ -29,6 +29,79 @@ function mapChannelRefs(channelRefs) {
   });
 }
 
+function parseOptionalDate(v) {
+  if (v === undefined) return undefined;
+  if (v === null || v === "") return null;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) {
+    const err = new Error("invalid date");
+    err.statusCode = 400;
+    throw err;
+  }
+  return d;
+}
+
+/**
+ * Master form fields (event-level — NOT ticket sales window).
+ * Ticket start/end belong in detailsJson.tickets[].
+ */
+function pickMasterFields(body = {}) {
+  const data = {};
+
+  if (body.title !== undefined) {
+    const title = String(body.title).trim();
+    if (!title) {
+      const err = new Error("title cannot be empty");
+      err.statusCode = 400;
+      throw err;
+    }
+    data.title = title;
+  }
+
+  if (body.capacity !== undefined) {
+    const capacity = Number(body.capacity);
+    if (Number.isNaN(capacity) || capacity < 0) {
+      const err = new Error("capacity must be a non-negative number");
+      err.statusCode = 400;
+      throw err;
+    }
+    data.capacity = capacity;
+  }
+
+  if (body.category !== undefined) {
+    data.category = body.category ? String(body.category).trim() : null;
+  }
+  if (body.timezone !== undefined) {
+    data.timezone = body.timezone ? String(body.timezone).trim() : null;
+  }
+  if (body.description !== undefined) {
+    data.description = body.description != null ? String(body.description) : null;
+  }
+  if (body.format !== undefined) {
+    // in_person | online | hybrid
+    data.format = body.format ? String(body.format).trim() : null;
+  }
+
+  if (body.startAt !== undefined || body.start_at !== undefined) {
+    data.startAt = parseOptionalDate(body.startAt ?? body.start_at);
+  }
+  if (body.endAt !== undefined || body.end_at !== undefined) {
+    data.endAt = parseOptionalDate(body.endAt ?? body.end_at);
+  }
+
+  // WHERE: city / venue / country / address / lat-lng
+  if (body.locationJson !== undefined || body.location !== undefined) {
+    data.locationJson = body.locationJson !== undefined ? body.locationJson : body.location;
+  }
+
+  // Extra: tickets (sales window), cover, host — keep separate from event dates
+  if (body.detailsJson !== undefined || body.details !== undefined) {
+    data.detailsJson = body.detailsJson !== undefined ? body.detailsJson : body.details;
+  }
+
+  return data;
+}
+
 async function listMasterEvents(req, res, next) {
   try {
     const events = await prisma.masterEvent.findMany({
@@ -61,18 +134,20 @@ async function getMasterEvent(req, res, next) {
 
 async function createMasterEvent(req, res, next) {
   try {
-    const { title, capacity = 150, channelRefs = [] } = req.body;
+    const body = req.body || {};
+    const { channelRefs = [] } = body;
 
-    if (!title) {
+    if (!body.title) {
       return res.status(400).json({ success: false, message: "title is required" });
     }
+
+    const fields = pickMasterFields({ ...body, title: body.title, capacity: body.capacity ?? 150 });
 
     const event = await prisma.masterEvent.create({
       data: {
         id: crypto.randomUUID().replace(/-/g, "").slice(0, 64),
-        title,
-        capacity,
         userId: req.userId,
+        ...fields,
         channelRefs: channelRefs.length
           ? { create: mapChannelRefs(channelRefs) }
           : undefined,
@@ -97,20 +172,9 @@ async function updateMasterEvent(req, res, next) {
       return res.status(404).json({ success: false, message: "Master event not found" });
     }
 
-    const { title, capacity, channelRefs } = req.body || {};
-    if (title !== undefined && !String(title).trim()) {
-      return res.status(400).json({ success: false, message: "title cannot be empty" });
-    }
-    if (capacity !== undefined && (Number.isNaN(Number(capacity)) || Number(capacity) < 0)) {
-      return res.status(400).json({
-        success: false,
-        message: "capacity must be a non-negative number",
-      });
-    }
-
-    const data = {};
-    if (title !== undefined) data.title = String(title).trim();
-    if (capacity !== undefined) data.capacity = Number(capacity);
+    const body = req.body || {};
+    const data = pickMasterFields(body);
+    const { channelRefs } = body;
 
     if (Array.isArray(channelRefs)) {
       const refs = mapChannelRefs(channelRefs);
@@ -132,7 +196,7 @@ async function updateMasterEvent(req, res, next) {
     } else {
       return res.status(400).json({
         success: false,
-        message: "Provide title, capacity, and/or channelRefs to update",
+        message: "Provide fields to update (title, category, timezone, location, …)",
       });
     }
 

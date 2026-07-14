@@ -123,13 +123,23 @@ model AppSettings {
 }
 
 model MasterEvent {
-  id        String   @id @db.VarChar(64)
-  userId    BigInt?  @map("user_id") @db.BigInt
-  title     String   @db.VarChar(500)
-  capacity  Int      @default(150)
-  sold      Int      @default(0)
-  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  id           String    @id @db.VarChar(64)
+  userId       BigInt?   @map("user_id") @db.BigInt
+  title        String    @db.VarChar(500)
+  capacity     Int       @default(150)
+  sold         Int       @default(0)
+  category     String?   @db.VarChar(128)
+  timezone     String?   @db.VarChar(64)
+  description  String?   @db.Text
+  format       String?   @db.VarChar(32)
+  startAt      DateTime? @map("start_at") @db.DateTime(3)
+  endAt        DateTime? @map("end_at") @db.DateTime(3)
+  /// Venue / city / country / address / lat-lng (WHERE step)
+  locationJson Json?     @map("location_json")
+  /// Extra form data (cover, host, tickets sales window, etc.) — not event dates
+  detailsJson  Json?     @map("details_json")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
 
   channelRefs ChannelRef[]
   attendees   Attendee[]
