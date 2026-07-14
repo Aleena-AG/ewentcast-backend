@@ -12,6 +12,17 @@ const {
 
 const MASTER_INCLUDE = { channelRefs: true, attendees: true };
 
+/** Shape for frontend: location/details aliases + ISO dates. */
+function toPublicMaster(event) {
+  if (!event) return event;
+  const row = serialize(event);
+  return {
+    ...row,
+    location: row.locationJson ?? row.location ?? null,
+    details: row.detailsJson ?? row.details ?? null,
+  };
+}
+
 function mapChannelRefs(channelRefs) {
   return channelRefs.map((ref) => {
     const channel = parseChannel(ref.channel);
@@ -104,12 +115,56 @@ function pickMasterFields(body = {}) {
 
 async function listMasterEvents(req, res, next) {
   try {
+    const channel = parseChannel(String(req.query.channel || ""));
+    const eventId = String(req.query.eventId || req.query.event_id || "").trim();
+
+    // Frontend: findMasterByChannelEvent → GET /registry?channel=&eventId=
+    if (channel && eventId) {
+      const ref = await prisma.channelRef.findFirst({
+        where: {
+          channel,
+          eventId,
+          masterEvent: { userId: req.userId },
+        },
+        include: {
+          masterEvent: { include: { channelRefs: true } },
+        },
+      });
+
+      if (!ref) {
+        return res.json({
+          success: true,
+          data: { master: null, links: {} },
+        });
+      }
+
+      const links = {};
+      for (const r of ref.masterEvent.channelRefs) {
+        links[r.channel] = {
+          eventId: r.eventId,
+          ...(r.ticketId ? { ticketId: r.ticketId } : {}),
+          ...(r.url ? { url: r.url } : {}),
+        };
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          master: {
+            id: ref.masterEvent.id,
+            title: ref.masterEvent.title,
+          },
+          links,
+        },
+      });
+    }
+
     const events = await prisma.masterEvent.findMany({
       where: { userId: req.userId },
       include: MASTER_INCLUDE,
       orderBy: { updatedAt: "desc" },
     });
-    res.json({ success: true, data: serialize(events) });
+    res.json({ success: true, data: events.map(toPublicMaster) });
   } catch (err) {
     next(err);
   }
@@ -126,7 +181,7 @@ async function getMasterEvent(req, res, next) {
       return res.status(404).json({ success: false, message: "Master event not found" });
     }
 
-    res.json({ success: true, data: serialize(event) });
+    res.json({ success: true, data: toPublicMaster(event) });
   } catch (err) {
     next(err);
   }
@@ -155,7 +210,7 @@ async function createMasterEvent(req, res, next) {
       include: MASTER_INCLUDE,
     });
 
-    res.status(201).json({ success: true, data: serialize(event) });
+    res.status(201).json({ success: true, data: toPublicMaster(event) });
   } catch (err) {
     next(err);
   }
@@ -205,7 +260,7 @@ async function updateMasterEvent(req, res, next) {
       include: MASTER_INCLUDE,
     });
 
-    res.json({ success: true, data: serialize(event) });
+    res.json({ success: true, data: toPublicMaster(event) });
   } catch (err) {
     next(err);
   }

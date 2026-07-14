@@ -35,6 +35,8 @@ async function getMasterEvent(masterId) {
     endAt: row.endAt ? row.endAt.toISOString() : null,
     locationJson: row.locationJson || null,
     detailsJson: row.detailsJson || null,
+    location: row.locationJson || null,
+    details: row.detailsJson || null,
     userId: row.userId != null ? Number(row.userId) : null,
     channels,
     channelRefs: row.channelRefs,
