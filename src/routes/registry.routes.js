@@ -4,6 +4,7 @@ const {
   listMasterEvents,
   getMasterEvent,
   createMasterEvent,
+  updateMasterEvent,
   listAttendees,
 } = require("../controllers/registry.controller");
 
@@ -14,6 +15,8 @@ router.use(requireAuth);
 router.get("/", listMasterEvents);
 router.post("/", createMasterEvent);
 router.get("/:id", getMasterEvent);
+router.patch("/:id", updateMasterEvent);
+router.put("/:id", updateMasterEvent);
 router.get("/:id/attendees", listAttendees);
 
 module.exports = router;
