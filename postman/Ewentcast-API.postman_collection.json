@@ -1,14 +1,28 @@
 {
   "info": {
-    "_postman_id": "7225f527-33bb-44e6-ab00-c7bae7fb16ee",
-    "name": "Ewentcast API — Auth + Channels",
-    "description": "Login/Register auto-saves {{authToken}}. Collection Authorization = Bearer Token {{authToken}}. Use Inherit auth from parent on Me and other protected requests. Flow: Login → Me.",
+    "_postman_id": "e0f287ad-1766-4deb-b622-ddfbf6597e8a",
+    "name": "Ewentcast API",
+    "description": "Complete Ewentcast backend collection (all routes).\n\nAuth: Collection uses Bearer {{authToken}}. Login/Register auto-save the token.\nFlow: Auth → Login → Connect Channels (Settings) → Events sync-from-api → Registry / Bookings.\n\nNote: There is no /dashboard route. Channel connect = PUT /settings. Events have no separate create/edit REST — use Sync (upsert) or Sync from API.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
   },
   "variable": [
     {
       "key": "baseUrl",
       "value": "http://api.ewentcast.test"
+    },
+    {
+      "key": "authToken",
+      "value": ""
     },
     {
       "key": "userId",
@@ -24,15 +38,11 @@
     },
     {
       "key": "masterId",
-      "value": "mst_sample"
+      "value": ""
     },
     {
       "key": "webhookLogToken",
       "value": "change-me"
-    },
-    {
-      "key": "authToken",
-      "value": ""
     },
     {
       "key": "resetToken",
@@ -53,241 +63,29 @@
   ],
   "item": [
     {
-      "name": "Auth",
-      "description": "Full auth flow: register → verify email → login → me → forgot → reset → logout",
-      "item": [
-        {
-          "name": "Register",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const j = pm.response.json();",
-                  "if (pm.response.code === 200 || pm.response.code === 201) {",
-                  "  if (j.token) {",
-                  "    pm.collectionVariables.set(\"authToken\", j.token);",
-                  "    console.log(\"authToken updated\");",
-                  "  }",
-                  "  if (j.user && j.user.id) pm.collectionVariables.set(\"userId\", String(j.user.id));",
-                  "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
-                  "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Demo User\",\n  \"email\": \"{{authEmail}}\",\n  \"password\": \"{{authPassword}}\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/auth/register",
-            "description": "Creates user + trial subscription + session. Saves authToken + verifyToken.",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Login",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const j = pm.response.json();",
-                  "if (pm.response.code === 200 || pm.response.code === 201) {",
-                  "  if (j.token) {",
-                  "    pm.collectionVariables.set(\"authToken\", j.token);",
-                  "    console.log(\"authToken updated\");",
-                  "  }",
-                  "  if (j.user && j.user.id) pm.collectionVariables.set(\"userId\", String(j.user.id));",
-                  "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
-                  "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{authEmail}}\",\n  \"password\": \"{{authPassword}}\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/auth/login",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Me",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/auth/me"
-          }
-        },
-        {
-          "name": "Resend Verification Email",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "  const j = pm.response.json();",
-                  "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{authEmail}}\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/auth/resend-verification",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Verify Email (POST)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"token\": \"{{verifyToken}}\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/auth/verify-email",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Verify Email (GET link)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/auth/verify-email?token={{verifyToken}}",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Forgot Password",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "  const j = pm.response.json();",
-                  "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{authEmail}}\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/auth/forgot-password",
-            "description": "In non-production returns resetToken for testing.",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Reset Password",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"password\": \"Password123!\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/auth/reset-password",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Logout",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/auth/logout"
-          }
-        }
-      ],
-      "auth": {
-        "type": "noauth"
-      }
-    },
-    {
       "name": "Health",
+      "description": "Public health check",
       "item": [
         {
           "name": "Root",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/",
-            "description": "API root — confirms domain proxy is working",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "API root message.",
             "auth": {
               "type": "noauth"
             }
@@ -297,62 +95,535 @@
           "name": "Health Check",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/health",
-            "description": "API health check",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health"
+              ]
+            },
+            "description": "Liveness probe.",
             "auth": {
               "type": "noauth"
             }
+          }
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "Auth",
+      "description": "Register / login / me / password / verify. Login + Register save {{authToken}}.",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Creates user + trial + session. Saves authToken.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo User\",\n  \"email\": \"{{authEmail}}\",\n  \"password\": \"{{authPassword}}\"\n}"
+            }
           },
-          "response": [
+          "event": [
             {
-              "name": "OK",
-              "status": "OK",
-              "code": 200,
-              "_postman_previewlanguage": "json",
-              "body": "{\n  \"success\": true,\n  \"message\": \"API is running\"\n}"
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  if (j.token) {",
+                  "    pm.collectionVariables.set(\"authToken\", j.token);",
+                  "    console.log(\"authToken updated\");",
+                  "  }",
+                  "  if (j.user && j.user.id) pm.collectionVariables.set(\"userId\", String(j.user.id));",
+                  "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
+                  "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
+                  "}"
+                ]
+              }
             }
           ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login and auto-save Bearer {{authToken}}.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{authEmail}}\",\n  \"password\": \"{{authPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  if (j.token) {",
+                  "    pm.collectionVariables.set(\"authToken\", j.token);",
+                  "    console.log(\"authToken updated\");",
+                  "  }",
+                  "  if (j.user && j.user.id) pm.collectionVariables.set(\"userId\", String(j.user.id));",
+                  "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
+                  "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Current user + subscription (requires Login first)."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Invalidate current session token."
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{authEmail}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const j = pm.response.json();",
+                  "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"password\": \"{{authPassword}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Resend Verification Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/resend-verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "resend-verification"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{authEmail}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const j = pm.response.json();",
+                  "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Email (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verifyToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Verify Email (GET link)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-email?token={{verifyToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-email"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{verifyToken}}"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
         }
-      ]
+      ],
+      "auth": {
+        "type": "noauth"
+      }
     },
     {
       "name": "Users",
+      "description": "Authenticated user profile endpoints",
       "item": [
         {
-          "name": "List Users",
+          "name": "List me (users)",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/users"
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ]
+            },
+            "description": "Returns array with the authenticated user only."
           }
         },
         {
-          "name": "Get User By ID",
+          "name": "Get user by id",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/users/{{userId}}"
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Own profile (+ subscription, settings). 403 if id ≠ self."
           }
         }
       ]
     },
     {
-      "name": "Settings",
+      "name": "Dashboard",
+      "description": "Overview KPIs — ported from eventlifter-core GET /api/dashboard/stats.",
       "item": [
         {
-          "name": "Get Settings (masked)",
+          "name": "Get dashboard stats",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/settings"
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboard/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dashboard",
+                "stats"
+              ]
+            },
+            "description": "Per-channel events/bookings/tickets/revenue, totals, unifiedAttendees, recent events (60), recent bookings (8), 7-day bookingTrend. Requires Bearer token. Also use Connect Channels (Settings) + Registry for full Overview UI."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Connect Channels (Settings)",
+      "description": "Connect / update / disconnect channel credentials. This is the connect-channel surface (PUT /settings).",
+      "item": [
+        {
+          "name": "Get settings (masked)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings"
+              ]
+            },
+            "description": "Channel credentials with secrets masked + configured flags."
           }
         },
         {
-          "name": "Get Settings (full)",
+          "name": "Get settings (full)",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/settings?full=1",
               "host": [
@@ -369,483 +640,1116 @@
                   "value": "1"
                 }
               ]
+            },
+            "description": "Unmasked stored JSON. Use carefully."
+          }
+        },
+        {
+          "name": "Connect / update Luma",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings"
+              ]
+            },
+            "description": "Save Luma API key + calendarId (partial merge).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"luma\": {\n    \"apiKey\": \"YOUR_LUMA_API_KEY\",\n    \"calendarId\": \"cal-xxxxx\",\n    \"apiBaseUrl\": \"https://public-api.luma.com\",\n    \"discoverBaseUrl\": \"https://api.lu.ma\"\n  }\n}"
             }
           }
         },
         {
-          "name": "Update Settings — All Channels",
+          "name": "Connect / update Eventbrite",
           "request": {
             "method": "PUT",
             "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings"
+              ]
+            },
+            "description": "Save Eventbrite OAuth app + private token. OAuth callback route is not implemented yet; privateToken is used for API sync.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"luma\": {\n    \"apiKey\": \"luma_live_xxxxxxxxxxxxxxxx\",\n    \"calendarId\": \"cal-xxxxx\",\n    \"apiBaseUrl\": \"https://public-api.luma.com\",\n    \"discoverBaseUrl\": \"https://api.lu.ma\"\n  },\n  \"eventbrite\": {\n    \"clientId\": \"your-eb-client-id\",\n    \"clientSecret\": \"your-eb-client-secret\",\n    \"redirectUri\": \"http://api.ewentcast.test/api/v1/eventbrite/callback\",\n    \"privateToken\": \"EBXXXXXXXXXXXXXXXX\",\n    \"publicToken\": \"\"\n  },\n  \"hightribe\": {\n    \"serviceUrl\": \"https://api.hightribe.com\",\n    \"apiKey\": \"\",\n    \"webhookSecret\": \"ht-webhook-secret-change-me\"\n  }\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/settings"
+              "raw": "{\n  \"eventbrite\": {\n    \"clientId\": \"YOUR_EB_CLIENT_ID\",\n    \"clientSecret\": \"YOUR_EB_CLIENT_SECRET\",\n    \"redirectUri\": \"{{baseUrl}}/api/v1/eventbrite/callback\",\n    \"privateToken\": \"YOUR_EB_PRIVATE_TOKEN\",\n    \"publicToken\": \"\"\n  }\n}"
+            }
           }
         },
         {
-          "name": "Update Settings — Luma Only",
+          "name": "Connect / update Hightribe",
           "request": {
             "method": "PUT",
             "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings"
+              ]
+            },
+            "description": "Save Hightribe service URL + API key + webhook secret.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"luma\": {\n    \"apiKey\": \"luma_live_xxxxxxxxxxxxxxxx\"\n  }\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/settings"
+              "raw": "{\n  \"hightribe\": {\n    \"serviceUrl\": \"https://api.hightribe.com\",\n    \"apiKey\": \"YOUR_HT_API_KEY\",\n    \"webhookSecret\": \"YOUR_HT_WEBHOOK_SECRET\"\n  }\n}"
+            }
           }
         },
         {
-          "name": "Clear Channel Settings",
+          "name": "Disconnect Luma",
           "request": {
             "method": "DELETE",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/settings/{{channel}}"
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/luma",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "luma"
+              ]
+            },
+            "description": "Reset Luma settings to defaults."
+          }
+        },
+        {
+          "name": "Disconnect Eventbrite",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/eventbrite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "eventbrite"
+              ]
+            },
+            "description": "Reset Eventbrite settings to defaults."
+          }
+        },
+        {
+          "name": "Disconnect Hightribe",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/hightribe",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "hightribe"
+              ]
+            },
+            "description": "Reset Hightribe settings to defaults."
           }
         }
       ]
     },
     {
-      "name": "Events — List & Get",
+      "name": "Events",
+      "description": "Per-channel events. Create/edit = Sync upsert or Sync-from-API. Get/list/delete included. channel = luma | eventbrite | hightribe.",
       "item": [
         {
-          "name": "List Luma Events",
+          "name": "List all bookings",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/events/luma"
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "events",
+                "bookings"
+              ]
+            },
+            "description": "All channel bookings for the authenticated user."
           }
         },
         {
-          "name": "List Eventbrite Events",
+          "name": "List events ({{channel}})",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/events/eventbrite"
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/{{channel}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "events",
+                "{{channel}}"
+              ]
+            },
+            "description": "Generic list using {{channel}} variable."
           }
         },
         {
-          "name": "List Hightribe Events",
+          "name": "Get event ({{channel}})",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/events/hightribe"
-          }
-        },
-        {
-          "name": "Get Event By External ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/events/{{channel}}/{{externalId}}"
-          }
-        },
-        {
-          "name": "List All Bookings",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/events/bookings"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Events — Sync",
-      "item": [
-        {
-          "name": "Sync From API (Luma)",
-          "request": {
-            "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
+                "key": "Accept",
                 "value": "application/json"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}"
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/{{channel}}/{{externalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "events",
+                "{{channel}}",
+                "{{externalId}}"
+              ]
             },
-            "url": "{{baseUrl}}/api/v1/events/luma/sync-from-api",
-            "description": "Pulls events + guests from Luma API and upserts into DB. Needs luma.apiKey in settings."
+            "description": "Generic get using {{channel}} + {{externalId}}."
           }
         },
         {
-          "name": "Sync From API (Eventbrite)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Luma",
+          "description": "luma events: list / get / sync (create|update upsert) / sync-from-api / delete",
+          "item": [
+            {
+              "name": "List luma events",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/luma",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "luma"
+                  ]
+                },
+                "description": "List stored events for this channel (current user)."
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}"
             },
-            "url": "{{baseUrl}}/api/v1/events/eventbrite/sync-from-api"
-          }
-        },
-        {
-          "name": "Sync From API (Hightribe)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+            {
+              "name": "Get luma event",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/luma/{{externalId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "luma",
+                    "{{externalId}}"
+                  ]
+                },
+                "description": "Get one stored event by externalId."
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}"
             },
-            "url": "{{baseUrl}}/api/v1/events/hightribe/sync-from-api",
-            "description": "Needs ht_connections token or hightribe.apiKey."
-          }
-        },
-        {
-          "name": "Sync Events (raw upsert) — Luma",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+            {
+              "name": "Sync luma events (create/update)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/luma/sync",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "luma",
+                    "sync"
+                  ]
+                },
+                "description": "Upsert events into DB (acts as create + edit). Set prune=true to remove missing ones.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"prune\": true,\n  \"events\": [\n    {\n      \"api_id\": \"evt-sample-001\",\n      \"name\": \"Sunset Yoga on the Beach\",\n      \"start_at\": \"2026-08-01T17:00:00.000Z\",\n      \"end_at\": \"2026-08-01T18:30:00.000Z\",\n      \"timezone\": \"America/Los_Angeles\",\n      \"url\": \"https://lu.ma/sunset-yoga\",\n      \"cover_url\": \"https://images.example.com/yoga.jpg\",\n      \"status\": \"approved\"\n    }\n  ]\n}"
+                }
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"prune\": true,\n  \"events\": [\n    {\n      \"api_id\": \"evt-sample-001\",\n      \"name\": \"Sunset Yoga on the Beach\",\n      \"start_at\": \"2026-08-01T17:00:00.000Z\",\n      \"end_at\": \"2026-08-01T18:30:00.000Z\",\n      \"timezone\": \"America/Los_Angeles\",\n      \"url\": \"https://lu.ma/sunset-yoga\",\n      \"cover_url\": \"https://images.example.com/yoga.jpg\",\n      \"meeting_url\": null,\n      \"geo_address_json\": {\n        \"city\": \"Santa Monica\",\n        \"country\": \"US\"\n      },\n      \"status\": \"approved\"\n    },\n    {\n      \"event\": {\n        \"api_id\": \"evt-sample-002\",\n        \"name\": \"Founders Meetup\",\n        \"start_at\": \"2026-08-10T19:00:00.000Z\",\n        \"end_at\": \"2026-08-10T21:00:00.000Z\",\n        \"timezone\": \"America/New_York\",\n        \"url\": \"https://lu.ma/founders\",\n        \"status\": \"approved\"\n      }\n    }\n  ]\n}"
             },
-            "url": "{{baseUrl}}/api/v1/events/luma/sync"
-          }
-        },
-        {
-          "name": "Sync Events (raw upsert) — Eventbrite",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+            {
+              "name": "Sync luma from API",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/luma/sync-from-api",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "luma",
+                    "sync-from-api"
+                  ]
+                },
+                "description": "Pull events (and bookings where supported) from the live channel API using Connect Channel credentials.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"prune\": false,\n  \"events\": [\n    {\n      \"id\": \"12345678901\",\n      \"name\": { \"text\": \"Tech Conference 2026\" },\n      \"start\": { \"utc\": \"2026-09-15T14:00:00Z\" },\n      \"end\": { \"utc\": \"2026-09-15T22:00:00Z\" },\n      \"url\": \"https://www.eventbrite.com/e/tech-conference-12345678901\",\n      \"logo\": { \"original\": { \"url\": \"https://images.example.com/tech.jpg\" } },\n      \"is_free\": false,\n      \"status\": \"live\"\n    }\n  ]\n}"
             },
-            "url": "{{baseUrl}}/api/v1/events/eventbrite/sync"
-          }
-        },
-        {
-          "name": "Sync Events (raw upsert) — Hightribe",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+            {
+              "name": "Sync luma bookings",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/luma/sync-bookings",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "luma",
+                    "sync-bookings"
+                  ]
+                },
+                "description": "Upsert bookings for this channel.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"bookings\": [\n    {\n      \"id\": \"luma-guest-001\",\n      \"email\": \"alice@example.com\",\n      \"name\": \"Alice Khan\",\n      \"event_external_id\": \"evt-sample-001\",\n      \"event_title\": \"Sunset Yoga on the Beach\",\n      \"registered_at\": \"2026-07-01T10:15:00.000Z\",\n      \"status\": \"approved\",\n      \"ticket_count\": 1\n    }\n  ]\n}"
+                }
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"prune\": false,\n  \"events\": [\n    {\n      \"id\": \"ht-evt-100\",\n      \"title\": \"Desert Retreat Weekend\",\n      \"dates\": {\n        \"starts_at\": \"2026-10-01T09:00:00.000Z\",\n        \"ends_at\": \"2026-10-03T18:00:00.000Z\"\n      },\n      \"timezone\": \"Asia/Dubai\",\n      \"url\": \"https://hightribe.com/events/desert-retreat\",\n      \"cover_url\": \"https://images.example.com/desert.jpg\",\n      \"location\": \"Al Ain Oasis\",\n      \"publish_status\": \"published\"\n    }\n  ]\n}"
             },
-            "url": "{{baseUrl}}/api/v1/events/hightribe/sync"
-          }
-        },
-        {
-          "name": "Sync Bookings (raw upsert) — Luma",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+            {
+              "name": "Delete luma event",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/luma/{{externalId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "luma",
+                    "{{externalId}}"
+                  ]
+                },
+                "description": "Delete one stored event by externalId."
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"bookings\": [\n    {\n      \"id\": \"luma-guest-001\",\n      \"email\": \"alice@example.com\",\n      \"name\": \"Alice Khan\",\n      \"event_external_id\": \"evt-sample-001\",\n      \"event_title\": \"Sunset Yoga on the Beach\",\n      \"registered_at\": \"2026-07-01T10:15:00.000Z\",\n      \"status\": \"approved\",\n      \"ticket_count\": 1\n    },\n    {\n      \"id\": \"luma-guest-002\",\n      \"guest_email\": \"bob@example.com\",\n      \"guest_name\": \"Bob Ali\",\n      \"event_external_id\": \"evt-sample-001\",\n      \"event_title\": \"Sunset Yoga on the Beach\",\n      \"registered_at\": \"2026-07-02T08:00:00.000Z\",\n      \"status\": \"approved\",\n      \"ticket_count\": 2\n    }\n  ]\n}"
             },
-            "url": "{{baseUrl}}/api/v1/events/luma/sync-bookings"
-          }
-        },
-        {
-          "name": "Sync Bookings (raw upsert) — Eventbrite",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+            {
+              "name": "Purge all luma events",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/luma",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "luma"
+                  ]
+                },
+                "description": "Delete all events + bookings + registry links for this channel."
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"bookings\": [\n    {\n      \"id\": \"eb-attendee-555\",\n      \"email\": \"carol@example.com\",\n      \"name\": \"Carol Ahmed\",\n      \"event_external_id\": \"12345678901\",\n      \"event_title\": \"Tech Conference 2026\",\n      \"registered_at\": \"2026-07-05T12:00:00.000Z\",\n      \"status\": \"Attending\",\n      \"ticket_count\": 1\n    }\n  ]\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/events/eventbrite/sync-bookings"
-          }
+            }
+          ]
         },
         {
-          "name": "Sync Bookings (raw upsert) — Hightribe",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Eventbrite",
+          "description": "eventbrite events: list / get / sync (create|update upsert) / sync-from-api / delete",
+          "item": [
+            {
+              "name": "List eventbrite events",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/eventbrite",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "eventbrite"
+                  ]
+                },
+                "description": "List stored events for this channel (current user)."
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"bookings\": [\n    {\n      \"id\": \"ht-booking-77\",\n      \"email\": \"dana@example.com\",\n      \"name\": \"Dana Raza\",\n      \"event_external_id\": \"ht-evt-100\",\n      \"event_title\": \"Desert Retreat Weekend\",\n      \"registered_at\": \"2026-07-08T09:30:00.000Z\",\n      \"status\": \"confirmed\",\n      \"ticket_count\": 2\n    }\n  ]\n}"
             },
-            "url": "{{baseUrl}}/api/v1/events/hightribe/sync-bookings"
-          }
+            {
+              "name": "Get eventbrite event",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/eventbrite/{{externalId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "eventbrite",
+                    "{{externalId}}"
+                  ]
+                },
+                "description": "Get one stored event by externalId."
+              }
+            },
+            {
+              "name": "Sync eventbrite events (create/update)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/eventbrite/sync",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "eventbrite",
+                    "sync"
+                  ]
+                },
+                "description": "Upsert events into DB (acts as create + edit). Set prune=true to remove missing ones.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"prune\": false,\n  \"events\": [\n    {\n      \"id\": \"12345678901\",\n      \"name\": {\n        \"text\": \"Tech Conference 2026\"\n      },\n      \"start\": {\n        \"utc\": \"2026-09-15T14:00:00Z\"\n      },\n      \"end\": {\n        \"utc\": \"2026-09-15T22:00:00Z\"\n      },\n      \"url\": \"https://www.eventbrite.com/e/tech-conference-12345678901\",\n      \"is_free\": false,\n      \"status\": \"live\"\n    }\n  ]\n}"
+                }
+              }
+            },
+            {
+              "name": "Sync eventbrite from API",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/eventbrite/sync-from-api",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "eventbrite",
+                    "sync-from-api"
+                  ]
+                },
+                "description": "Pull events (and bookings where supported) from the live channel API using Connect Channel credentials.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
+              }
+            },
+            {
+              "name": "Sync eventbrite bookings",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/eventbrite/sync-bookings",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "eventbrite",
+                    "sync-bookings"
+                  ]
+                },
+                "description": "Upsert bookings for this channel.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"bookings\": [\n    {\n      \"id\": \"eb-attendee-555\",\n      \"email\": \"carol@example.com\",\n      \"name\": \"Carol Ahmed\",\n      \"event_external_id\": \"12345678901\",\n      \"event_title\": \"Tech Conference 2026\",\n      \"registered_at\": \"2026-07-05T12:00:00.000Z\",\n      \"status\": \"Attending\",\n      \"ticket_count\": 1\n    }\n  ]\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete eventbrite event",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/eventbrite/{{externalId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "eventbrite",
+                    "{{externalId}}"
+                  ]
+                },
+                "description": "Delete one stored event by externalId."
+              }
+            },
+            {
+              "name": "Purge all eventbrite events",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/eventbrite",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "eventbrite"
+                  ]
+                },
+                "description": "Delete all events + bookings + registry links for this channel."
+              }
+            }
+          ]
         },
         {
-          "name": "Delete One Event",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/events/{{channel}}/{{externalId}}"
-          }
-        },
-        {
-          "name": "Purge Channel Data",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/events/{{channel}}",
-            "description": "Deletes all events + bookings + registry links for the channel."
-          }
+          "name": "Hightribe",
+          "description": "hightribe events: list / get / sync (create|update upsert) / sync-from-api / delete",
+          "item": [
+            {
+              "name": "List hightribe events",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/hightribe",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "hightribe"
+                  ]
+                },
+                "description": "List stored events for this channel (current user)."
+              }
+            },
+            {
+              "name": "Get hightribe event",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/hightribe/{{externalId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "hightribe",
+                    "{{externalId}}"
+                  ]
+                },
+                "description": "Get one stored event by externalId."
+              }
+            },
+            {
+              "name": "Sync hightribe events (create/update)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/hightribe/sync",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "hightribe",
+                    "sync"
+                  ]
+                },
+                "description": "Upsert events into DB (acts as create + edit). Set prune=true to remove missing ones.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"prune\": false,\n  \"events\": [\n    {\n      \"id\": \"ht-evt-100\",\n      \"title\": \"Desert Retreat Weekend\",\n      \"dates\": {\n        \"starts_at\": \"2026-10-01T09:00:00.000Z\",\n        \"ends_at\": \"2026-10-03T18:00:00.000Z\"\n      },\n      \"timezone\": \"Asia/Dubai\",\n      \"url\": \"https://hightribe.com/events/desert-retreat\",\n      \"location\": \"Al Ain Oasis\",\n      \"publish_status\": \"published\"\n    }\n  ]\n}"
+                }
+              }
+            },
+            {
+              "name": "Sync hightribe from API",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/hightribe/sync-from-api",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "hightribe",
+                    "sync-from-api"
+                  ]
+                },
+                "description": "Pull events (and bookings where supported) from the live channel API using Connect Channel credentials.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
+              }
+            },
+            {
+              "name": "Sync hightribe bookings",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/hightribe/sync-bookings",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "hightribe",
+                    "sync-bookings"
+                  ]
+                },
+                "description": "Upsert bookings for this channel.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"bookings\": [\n    {\n      \"id\": \"ht-booking-77\",\n      \"email\": \"dana@example.com\",\n      \"name\": \"Dana Raza\",\n      \"event_external_id\": \"ht-evt-100\",\n      \"event_title\": \"Desert Retreat Weekend\",\n      \"registered_at\": \"2026-07-08T09:30:00.000Z\",\n      \"status\": \"confirmed\",\n      \"ticket_count\": 2\n    }\n  ]\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete hightribe event",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/hightribe/{{externalId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "hightribe",
+                    "{{externalId}}"
+                  ]
+                },
+                "description": "Delete one stored event by externalId."
+              }
+            },
+            {
+              "name": "Purge all hightribe events",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/events/hightribe",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "events",
+                    "hightribe"
+                  ]
+                },
+                "description": "Delete all events + bookings + registry links for this channel."
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "Registry",
+      "description": "Master events linking channel events. List/get include per-channel status + publishState.",
       "item": [
         {
-          "name": "List Master Events",
+          "name": "List master events",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/registry"
-          }
-        },
-        {
-          "name": "Create Master Event",
-          "request": {
-            "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
+                "key": "Accept",
                 "value": "application/json"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"Sunset Yoga on the Beach\",\n  \"capacity\": 50,\n  \"userId\": \"{{userId}}\",\n  \"channelRefs\": [\n    {\n      \"channel\": \"luma\",\n      \"eventId\": \"evt-sample-001\",\n      \"ticketId\": \"ticket-type-abc\",\n      \"url\": \"https://lu.ma/sunset-yoga\"\n    },\n    {\n      \"channel\": \"eventbrite\",\n      \"eventId\": \"12345678901\",\n      \"ticketId\": \"tc_111\",\n      \"url\": \"https://www.eventbrite.com/e/tech-conference-12345678901\"\n    }\n  ]\n}"
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/registry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry"
+              ]
             },
-            "url": "{{baseUrl}}/api/v1/registry"
-          }
-        },
-        {
-          "name": "Get Master Event",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/registry/{{masterId}}"
-          }
-        },
-        {
-          "name": "List Attendees",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/registry/{{masterId}}/attendees"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Webhooks — Inbound",
-      "item": [
-        {
-          "name": "Luma — guest.registered",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+            "description": "List master events for token user. Each channelRef has status + publishState (published|draft)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const j = pm.response.json();",
+                  "  if (j.data && j.data[0] && j.data[0].id) {",
+                  "    pm.collectionVariables.set(\"masterId\", j.data[0].id);",
+                  "  }",
+                  "}"
+                ]
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"type\": \"guest.registered\",\n  \"guest\": {\n    \"api_id\": \"gst-abc123\",\n    \"event_api_id\": \"evt-sample-001\",\n    \"email\": \"webhook.guest@example.com\",\n    \"name\": \"Webhook Guest\",\n    \"user_email\": \"webhook.guest@example.com\",\n    \"user_name\": \"Webhook Guest\",\n    \"approval_status\": \"approved\",\n    \"registered_at\": \"2026-07-10T12:00:00.000Z\"\n  }\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/webhooks/luma",
-            "auth": {
-              "type": "noauth"
             }
-          }
+          ]
         },
         {
-          "name": "Luma — event.updated (skipped)",
+          "name": "Create master event",
           "request": {
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"type\": \"event.updated\",\n  \"data\": {\n    \"id\": \"evt-sample-001\",\n    \"name\": \"Sunset Yoga on the Beach\",\n    \"url\": \"https://lu.ma/sunset-yoga\"\n  }\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/webhooks/luma",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Eventbrite — test",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"config\": {\n    \"action\": \"test\"\n  }\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/webhooks/eventbrite",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Eventbrite — attendee",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"config\": {\n    \"action\": \"attendee.updated\"\n  },\n  \"api_url\": \"https://www.eventbriteapi.com/v3/events/12345678901/attendees/999/\",\n  \"attendee\": {\n    \"id\": \"999\",\n    \"event_id\": \"12345678901\",\n    \"status\": \"Attending\",\n    \"profile\": {\n      \"name\": \"EB Webhook User\",\n      \"email\": \"eb.webhook@example.com\",\n      \"first_name\": \"EB\",\n      \"last_name\": \"Webhook\"\n    }\n  }\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/webhooks/eventbrite",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Hightribe — booking",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
+                "key": "Accept",
                 "value": "application/json"
               },
               {
-                "key": "X-Webhook-Secret",
-                "value": "ht-webhook-secret-change-me",
-                "description": "Required only if secret is set in settings/env"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/registry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry"
+              ]
+            },
+            "description": "Create master event with optional channelRefs.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"event_id\": \"ht-evt-100\",\n  \"email\": \"ht.webhook@example.com\",\n  \"name\": \"HT Webhook Guest\",\n  \"booking_id\": \"ht-bk-501\",\n  \"registered_at\": \"2026-07-10T14:30:00.000Z\",\n  \"status\": \"confirmed\"\n}"
-            },
-            "url": "{{baseUrl}}/api/v1/webhooks/hightribe",
-            "auth": {
-              "type": "noauth"
+              "raw": "{\n  \"title\": \"Sunset Yoga on the Beach\",\n  \"capacity\": 50,\n  \"channelRefs\": [\n    {\n      \"channel\": \"luma\",\n      \"eventId\": \"evt-sample-001\",\n      \"ticketId\": \"ticket-type-abc\",\n      \"url\": \"https://lu.ma/sunset-yoga\"\n    },\n    {\n      \"channel\": \"eventbrite\",\n      \"eventId\": \"12345678901\",\n      \"ticketId\": \"tc_111\",\n      \"url\": \"https://www.eventbrite.com/e/tech-conference-12345678901\"\n    }\n  ]\n}"
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const j = pm.response.json();",
+                  "  if (j.data && j.data.id) pm.collectionVariables.set(\"masterId\", j.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get master event",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/registry/{{masterId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "{{masterId}}"
+              ]
+            },
+            "description": "Single master event with channelRefs (+ publishState) and attendees."
           }
         },
         {
-          "name": "Hightribe — info (GET)",
+          "name": "List attendees",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/webhooks/hightribe",
-            "auth": {
-              "type": "noauth"
-            }
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/registry/{{masterId}}/attendees",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "{{masterId}}",
+                "attendees"
+              ]
+            },
+            "description": "Attendees for a master event."
           }
         }
       ]
     },
     {
-      "name": "Webhooks — Setup & Logs",
+      "name": "Webhooks",
+      "description": "Inbound channel webhooks + setup + logs",
       "item": [
         {
-          "name": "Get Webhook Setup Info",
+          "name": "Get webhook setup",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/v1/webhooks/setup"
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/setup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "setup"
+              ]
+            },
+            "description": "Webhook endpoint URLs + Hightribe env hints."
           }
         },
         {
-          "name": "Register Webhooks (Luma + Eventbrite)",
+          "name": "Register webhooks (Luma + Eventbrite)",
           "request": {
             "method": "POST",
             "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/setup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "setup"
+              ]
+            },
+            "description": "Register webhooks on Luma + Eventbrite using saved credentials.",
             "body": {
               "mode": "raw",
               "raw": "{}"
-            },
-            "url": "{{baseUrl}}/api/v1/webhooks/setup",
-            "description": "Registers webhook URLs on Luma + Eventbrite using saved settings credentials."
+            }
           }
         },
         {
-          "name": "List Webhook Logs",
+          "name": "List webhook logs",
           "request": {
             "method": "GET",
             "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
               {
                 "key": "x-webhook-log-token",
                 "value": "{{webhookLogToken}}"
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/webhooks/logs?limit=50",
+              "raw": "{{baseUrl}}/api/v1/webhooks/logs?limit=50&token={{webhookLogToken}}",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -859,10 +1763,155 @@
                 {
                   "key": "limit",
                   "value": "50"
+                },
+                {
+                  "key": "token",
+                  "value": "{{webhookLogToken}}",
+                  "disabled": true
                 }
               ]
             },
-            "description": "Set WEBHOOK_LOG_TOKEN in .env to match {{webhookLogToken}}.",
+            "description": "Requires x-webhook-log-token or ?token= WEBHOOK_LOG_TOKEN.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Luma inbound",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/luma",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "luma"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"guest.registered\",\n  \"guest\": {\n    \"api_id\": \"gst-abc123\",\n    \"event_api_id\": \"evt-sample-001\",\n    \"email\": \"webhook.guest@example.com\",\n    \"name\": \"Webhook Guest\",\n    \"approval_status\": \"approved\",\n    \"registered_at\": \"2026-07-10T12:00:00.000Z\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Eventbrite inbound",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/eventbrite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "eventbrite"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": {\n    \"action\": \"attendee.updated\"\n  },\n  \"api_url\": \"https://www.eventbriteapi.com/v3/events/12345678901/attendees/999/\",\n  \"attendee\": {\n    \"id\": \"999\",\n    \"event_id\": \"12345678901\",\n    \"status\": \"Attending\",\n    \"profile\": {\n      \"name\": \"EB Webhook User\",\n      \"email\": \"eb.webhook@example.com\",\n      \"first_name\": \"EB\",\n      \"last_name\": \"Webhook\"\n    }\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Hightribe inbound",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Webhook-Secret",
+                "value": "YOUR_HT_WEBHOOK_SECRET"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/hightribe",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "hightribe"
+              ]
+            },
+            "description": "If webhookSecret configured, send X-Webhook-Secret header.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"ht-evt-100\",\n  \"email\": \"ht.webhook@example.com\",\n  \"name\": \"HT Webhook Guest\",\n  \"booking_id\": \"ht-bk-501\",\n  \"registered_at\": \"2026-07-10T14:30:00.000Z\",\n  \"status\": \"confirmed\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Hightribe webhook docs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/hightribe",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "hightribe"
+              ]
+            },
+            "description": "Documents expected Hightribe webhook payload.",
             "auth": {
               "type": "noauth"
             }
@@ -870,15 +1919,5 @@
         }
       ]
     }
-  ],
-  "auth": {
-    "type": "bearer",
-    "bearer": [
-      {
-        "key": "token",
-        "value": "{{authToken}}",
-        "type": "string"
-      }
-    ]
-  }
+  ]
 }

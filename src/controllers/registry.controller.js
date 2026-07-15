@@ -1,6 +1,10 @@
 const prisma = require("../config/db");
 const { serialize } = require("../utils/serialize");
 const crypto = require("crypto");
+const {
+  withChannelPublishStatus,
+  withChannelPublishStatusMany,
+} = require("../services/registry.service");
 
 async function listMasterEvents(req, res, next) {
   try {
@@ -9,7 +13,8 @@ async function listMasterEvents(req, res, next) {
       include: { channelRefs: true, attendees: true },
       orderBy: { updatedAt: "desc" },
     });
-    res.json({ success: true, data: serialize(events) });
+    const enriched = await withChannelPublishStatusMany(events);
+    res.json({ success: true, data: serialize(enriched) });
   } catch (err) {
     next(err);
   }
@@ -26,7 +31,8 @@ async function getMasterEvent(req, res, next) {
       return res.status(404).json({ success: false, message: "Master event not found" });
     }
 
-    res.json({ success: true, data: serialize(event) });
+    const enriched = await withChannelPublishStatus(event);
+    res.json({ success: true, data: serialize(enriched) });
   } catch (err) {
     next(err);
   }
@@ -60,7 +66,8 @@ async function createMasterEvent(req, res, next) {
       include: { channelRefs: true, attendees: true },
     });
 
-    res.status(201).json({ success: true, data: serialize(event) });
+    const enriched = await withChannelPublishStatus(event);
+    res.status(201).json({ success: true, data: serialize(enriched) });
   } catch (err) {
     next(err);
   }
