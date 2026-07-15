@@ -116,6 +116,30 @@ async function applyLumaEventTag(req, res, next) {
   }
 }
 
+async function listLumaGuests(req, res, next) {
+  try {
+    const settings = await getUserSettings(req.userId);
+    const eventId = String(
+      req.query.event_id ||
+        req.query.event_api_id ||
+        req.query.api_id ||
+        req.query.id ||
+        ""
+    ).trim();
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "event_id required",
+      });
+    }
+    const data = await luma.listEventGuests(settings, eventId);
+    sendLumaOk(res, data);
+  } catch (err) {
+    if (err.name === "LumaApiError") return sendLumaError(res, err);
+    next(err);
+  }
+}
+
 module.exports = {
   createLumaEvent,
   getLumaEvent,
@@ -124,4 +148,5 @@ module.exports = {
   createLumaTicketType,
   updateLumaTicketType,
   applyLumaEventTag,
+  listLumaGuests,
 };

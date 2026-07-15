@@ -92,6 +92,17 @@ async function createOrganizationEvent(settings, orgId, body) {
  * Forward any remaining /eventbrite/* path to Eventbrite v3.
  * Path is relative (e.g. events/123/structured_content/).
  */
+/**
+ * Attendees list rejects `page_size` (fixed at 50). Events list still accepts it.
+ */
+function sanitizeEbQuery(path, query = {}) {
+  const next = { ...query };
+  if (/(^|\/)attendees(\/|$)/i.test(path) && next.page_size != null) {
+    delete next.page_size;
+  }
+  return next;
+}
+
 async function proxyToEventbrite(settings, method, path, query = {}, body) {
   const clean = String(path || "")
     .replace(/^\/+/, "")
@@ -112,7 +123,7 @@ async function proxyToEventbrite(settings, method, path, query = {}, body) {
     outboundBody = sanitizeEventbriteEventBody(outboundBody);
   }
 
-  return ebRequest(settings, clean, query, {
+  return ebRequest(settings, clean, sanitizeEbQuery(clean, query), {
     method: upper,
     body: upper === "GET" || upper === "HEAD" ? undefined : outboundBody,
   });
@@ -174,7 +185,6 @@ async function fetchBookingsForSync(settings, events) {
             const data = await ebRequest(settings, `events/${e.id}/attendees`, {
               status: "attending",
               page: String(page),
-              page_size: "50",
             });
             for (const raw of data.attendees || []) {
               const item = normalizeEbAttendee(raw, eventTitle);

@@ -8,6 +8,7 @@ const {
   createLumaTicketType,
   updateLumaTicketType,
   applyLumaEventTag,
+  listLumaGuests,
 } = require("../controllers/luma.controller");
 
 const router = express.Router();
@@ -15,6 +16,7 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.get("/events", getLumaEvent);
+router.get("/guests", listLumaGuests);
 router.post("/events", createLumaEvent);
 router.post("/images/upload-url", createLumaImageUploadUrl);
 router.post("/images/create-upload-url", createLumaImageUploadUrl);
