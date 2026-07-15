@@ -142,8 +142,60 @@ async function createHightribeEventWithTickets(req, res, next) {
   }
 }
 
+/** Proxy FE: GET /api/v1/hightribe/events/bookings?page=&per_page= */
+async function listHightribeBookings(req, res, next) {
+  try {
+    const page = Number(req.query.page) || 1;
+    const perPage = Number(req.query.per_page || req.query.perPage) || 50;
+    const raw = await hightribe.htRequest(req.userId, "events/bookings", {
+      page: String(page),
+      per_page: String(perPage),
+    });
+    res.json({
+      success: true,
+      ...(raw && typeof raw === "object" ? raw : {}),
+      data: raw?.data ?? raw,
+    });
+  } catch (err) {
+    if (err.name === "HightribeApiError") {
+      return res.status(err.statusCode || 400).json({
+        success: false,
+        message: err.message,
+      });
+    }
+    next(err);
+  }
+}
+
+/** Proxy FE: GET /api/v1/hightribe/events?page=&per_page= */
+async function listHightribeEvents(req, res, next) {
+  try {
+    const page = Number(req.query.page) || 1;
+    const perPage = Number(req.query.per_page || req.query.perPage) || 50;
+    const raw = await hightribe.htRequest(req.userId, "events", {
+      page: String(page),
+      per_page: String(perPage),
+    });
+    res.json({
+      success: true,
+      ...(raw && typeof raw === "object" ? raw : {}),
+      data: raw?.data ?? raw,
+    });
+  } catch (err) {
+    if (err.name === "HightribeApiError") {
+      return res.status(err.statusCode || 400).json({
+        success: false,
+        message: err.message,
+      });
+    }
+    next(err);
+  }
+}
+
 module.exports = {
   loginHightribe,
   createHightribeEvent,
   createHightribeEventWithTickets,
+  listHightribeBookings,
+  listHightribeEvents,
 };

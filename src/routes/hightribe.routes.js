@@ -5,6 +5,8 @@ const {
   loginHightribe,
   createHightribeEvent,
   createHightribeEventWithTickets,
+  listHightribeBookings,
+  listHightribeEvents,
 } = require("../controllers/hightribe.controller");
 
 const router = express.Router();
@@ -24,6 +26,9 @@ function optionalMultipart(req, res, next) {
 router.use(requireAuth);
 
 router.post("/login", loginHightribe);
+
+router.get("/events/bookings", listHightribeBookings);
+router.get("/events", listHightribeEvents);
 
 router.post(
   "/events/with-tickets",
