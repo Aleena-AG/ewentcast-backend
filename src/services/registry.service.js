@@ -1,5 +1,6 @@
 const prisma = require("../config/db");
 const { parseChannel } = require("./channels/helpers");
+const { mirrorMasterToChannelEvents } = require("./channels/mirror-master.service");
 
 const MASTER_INCLUDE = {
   channelRefs: true,
@@ -142,6 +143,12 @@ async function linkChannel(masterId, userId, ref) {
       url: ref.url !== undefined ? ref.url : undefined,
     },
   });
+
+  const master = await prisma.masterEvent.findUnique({
+    where: { id: masterId },
+    include: { channelRefs: true },
+  });
+  await mirrorMasterToChannelEvents(userId, master);
 
   return getMasterEvent(masterId);
 }

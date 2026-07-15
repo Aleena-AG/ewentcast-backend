@@ -1,5 +1,6 @@
 const { getUserSettings } = require("../services/settings.service");
 const luma = require("../services/luma/luma.service");
+const { upsertChannelEvents } = require("../services/channels/events.service");
 
 function sendLumaError(res, err) {
   return res.status(err.statusCode || 400).json({
@@ -23,6 +24,11 @@ async function createLumaEvent(req, res, next) {
   try {
     const settings = await getUserSettings(req.userId);
     const data = await luma.createEvent(settings, req.body || {});
+    try {
+      await upsertChannelEvents("luma", req.userId, [data], { prune: false });
+    } catch {
+      /* dashboard mirror is best-effort */
+    }
     // Spread so FE can read `url` / `api_id` at top level or under `data`
     sendLumaOk(res, data, 201);
   } catch (err) {

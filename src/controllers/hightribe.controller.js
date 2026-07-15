@@ -4,6 +4,7 @@ const {
   upsertHtConnection,
   toPublicSettingsView,
 } = require("../services/settings.service");
+const { upsertChannelEvents } = require("../services/channels/events.service");
 
 async function loginHightribe(req, res, next) {
   try {
@@ -86,6 +87,11 @@ async function createHightribeEvent(req, res, next) {
     const raw = await hightribe.createEvent(req.userId, body, files);
     // HT returns { data: event }; FE reads response.data.id — unwrap one level
     const event = raw?.data ?? raw;
+    try {
+      await upsertChannelEvents("hightribe", req.userId, [event], { prune: false });
+    } catch {
+      /* dashboard mirror is best-effort */
+    }
     res.status(201).json({
       success: true,
       ...(raw && typeof raw === "object" ? raw : {}),
@@ -115,6 +121,11 @@ async function createHightribeEventWithTickets(req, res, next) {
     }
     const raw = await hightribe.createEventWithTickets(req.userId, body, files);
     const event = raw?.data ?? raw;
+    try {
+      await upsertChannelEvents("hightribe", req.userId, [event], { prune: false });
+    } catch {
+      /* dashboard mirror is best-effort */
+    }
     res.status(201).json({
       success: true,
       ...(raw && typeof raw === "object" ? raw : {}),

@@ -1,5 +1,6 @@
 const { getUserSettings } = require("../services/settings.service");
 const eventbrite = require("../services/eventbrite/eventbrite.service");
+const { upsertChannelEvents } = require("../services/channels/events.service");
 
 function sendEbError(res, err) {
   return res.status(err.statusCode || 400).json({
@@ -38,6 +39,11 @@ async function createOrganizationEvent(req, res, next) {
       req.params.orgId,
       req.body || {}
     );
+    try {
+      await upsertChannelEvents("eventbrite", req.userId, [data], { prune: false });
+    } catch {
+      /* dashboard mirror is best-effort */
+    }
     sendEbOk(res, data, 201);
   } catch (err) {
     if (err.name === "EventbriteApiError") return sendEbError(res, err);

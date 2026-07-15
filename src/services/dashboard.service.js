@@ -44,13 +44,25 @@ function bookingPrice(b) {
   return 0;
 }
 
+function coverFromMasterDetails(details) {
+  if (!details || typeof details !== "object") return null;
+  return (
+    details.coverUrl ||
+    details.cover_url ||
+    details.image ||
+    details.imageUrl ||
+    details.image_url ||
+    null
+  );
+}
+
 async function getDashboardStats(userId) {
   const [bookings, settingsRaw, masters, ...channelEventsLists] = await Promise.all([
     listAllUserBookings(userId),
     getUserSettings(userId).then(toPublicSettingsView),
     prisma.masterEvent.findMany({
       where: { userId: BigInt(userId) },
-      select: { sold: true },
+      include: { channelRefs: true },
     }),
     ...CHANNELS.map((ch) => listChannelEvents(ch, userId)),
   ]);
@@ -85,12 +97,81 @@ async function getDashboardStats(userId) {
       .filter((e) => e && e !== "—")
   );
 
+  // Merge channel-table events + registry channelRefs so published masters show
+  // even before a manual sync-from-api.
+  const seenByChannel = { hightribe: new Set(), luma: new Set(), eventbrite: new Set() };
+  const recent = [];
+
+  CHANNELS.forEach((channel, i) => {
+    for (const row of channelEventsLists[i] || []) {
+      const id = String(row.external_id || "");
+      if (!id) continue;
+      seenByChannel[channel].add(id);
+      recent.push({
+        id,
+        title: row.title || "Untitled",
+        startUtc: row.start_at || new Date().toISOString(),
+        endUtc: row.end_at,
+        coverUrl: row.cover_url,
+        status: row.status,
+        channel,
+        priceLabel: "",
+      });
+    }
+  });
+
+  for (const master of masters) {
+    const coverUrl = coverFromMasterDetails(master.detailsJson);
+    const startUtc = master.startAt
+      ? master.startAt.toISOString()
+      : master.createdAt?.toISOString() || new Date().toISOString();
+    const endUtc = master.endAt ? master.endAt.toISOString() : null;
+
+    let linkedAny = false;
+    for (const ref of master.channelRefs || []) {
+      const channel = ref.channel;
+      const id = String(ref.eventId || "").trim();
+      if (!id || !seenByChannel[channel]) continue;
+      linkedAny = true;
+      if (seenByChannel[channel].has(id)) continue;
+      seenByChannel[channel].add(id);
+      recent.push({
+        id,
+        title: master.title || "Untitled",
+        startUtc,
+        endUtc,
+        coverUrl,
+        status: "published",
+        channel,
+        priceLabel: "",
+      });
+    }
+
+    // Master created but channels not linked yet — still show once on dashboard
+    if (!linkedAny) {
+      recent.push({
+        id: master.id,
+        title: master.title || "Untitled",
+        startUtc,
+        endUtc,
+        coverUrl,
+        status: "draft",
+        channel: "hightribe",
+        priceLabel: "",
+      });
+    }
+  }
+
+  recent.sort((a, b) => new Date(b.startUtc).getTime() - new Date(a.startUtc).getTime());
+  const recentSlice = recent.slice(0, 60);
+
   const channels = {};
   CHANNELS.forEach((channel, i) => {
-    const events = channelEventsLists[i] || [];
+    const stored = channelEventsLists[i] || [];
+    const eventCount = Math.max(stored.length, seenByChannel[channel].size);
     const chBookings = byCh[channel] || [];
     channels[channel] = {
-      events: events.length,
+      events: eventCount,
       bookings: chBookings.length,
       tickets: chBookings.reduce((s, b) => s + ticketCount(b), 0),
       revenue: Math.round(revenueByChannel[channel] * 100) / 100,
@@ -98,22 +179,6 @@ async function getDashboardStats(userId) {
       configured: configured[channel],
     };
   });
-
-  const recent = CHANNELS.flatMap((channel, i) =>
-    (channelEventsLists[i] || []).map((row) => ({
-      id: String(row.external_id || ""),
-      title: row.title || "Untitled",
-      startUtc: row.start_at || new Date().toISOString(),
-      endUtc: row.end_at,
-      coverUrl: row.cover_url,
-      status: row.status,
-      channel,
-      priceLabel: "",
-    }))
-  )
-    .filter((e) => e.id)
-    .sort((a, b) => new Date(b.startUtc).getTime() - new Date(a.startUtc).getTime())
-    .slice(0, 60);
 
   const recentBookings = [...bookings].slice(0, 20).map((b) => ({
     name: String(b.guest_name || "Guest"),
@@ -133,7 +198,10 @@ async function getDashboardStats(userId) {
     if (point.byChannel[b.channel] != null) point.byChannel[b.channel] += 1;
   }
 
-  const totalEvents = CHANNELS.reduce((s, ch) => s + channels[ch].events, 0);
+  const totalEvents = Math.max(
+    CHANNELS.reduce((s, ch) => s + channels[ch].events, 0),
+    masters.length
+  );
 
   return {
     success: true,
@@ -145,7 +213,7 @@ async function getDashboardStats(userId) {
     totalRevenue: Math.round(totalRevenue * 100) / 100,
     revenueCurrency: "USD",
     unifiedAttendees: uniqueEmails.size,
-    recent,
+    recent: recentSlice,
     recentBookings,
     bookingTrend,
   };

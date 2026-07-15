@@ -9,6 +9,7 @@ const {
   registerAttendee,
   registerAttendeeByChannel,
 } = require("../services/registry.service");
+const { mirrorMasterToChannelEvents } = require("../services/channels/mirror-master.service");
 
 const MASTER_INCLUDE = { channelRefs: true, attendees: true };
 
@@ -210,6 +211,8 @@ async function createMasterEvent(req, res, next) {
       include: MASTER_INCLUDE,
     });
 
+    await mirrorMasterToChannelEvents(req.userId, event);
+
     res.status(201).json({ success: true, data: toPublicMaster(event) });
   } catch (err) {
     next(err);
@@ -259,6 +262,8 @@ async function updateMasterEvent(req, res, next) {
       where: { id: existing.id, userId: req.userId },
       include: MASTER_INCLUDE,
     });
+
+    await mirrorMasterToChannelEvents(req.userId, event);
 
     res.json({ success: true, data: toPublicMaster(event) });
   } catch (err) {
