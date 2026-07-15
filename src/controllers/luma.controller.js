@@ -18,4 +18,27 @@ async function createLumaEvent(req, res, next) {
   }
 }
 
-module.exports = { createLumaEvent };
+async function createLumaImageUploadUrl(req, res, next) {
+  try {
+    const settings = await getUserSettings(req.userId);
+    const data = await luma.createImageUploadUrl(settings, req.body || {});
+    // Frontend expects { data: { upload_url, file_url / public_url } }
+    res.json({
+      success: true,
+      status: "ok",
+      data,
+    });
+  } catch (err) {
+    if (err.name === "LumaApiError") {
+      return res.status(err.statusCode || 400).json({
+        success: false,
+        status: "error",
+        message: err.message,
+        errorCode: err.errorCode,
+      });
+    }
+    next(err);
+  }
+}
+
+module.exports = { createLumaEvent, createLumaImageUploadUrl };

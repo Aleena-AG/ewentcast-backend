@@ -69,7 +69,21 @@ async function loginHightribe(req, res, next) {
 
 async function createHightribeEvent(req, res, next) {
   try {
-    const data = await hightribe.createEvent(req.userId, req.body || {});
+    const files = Array.isArray(req.files) ? req.files : [];
+    const body = req.body || {};
+    if (!body.title && !body["title"]) {
+      return res.status(422).json({
+        success: false,
+        message:
+          "title is required. Multipart FormData (with cover) must be parsed — redeploy backend if you still see empty body errors.",
+        debug: {
+          contentType: req.headers["content-type"] || null,
+          bodyKeys: Object.keys(body),
+          fileCount: files.length,
+        },
+      });
+    }
+    const data = await hightribe.createEvent(req.userId, body, files);
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (err.name === "HightribeApiError") {
@@ -84,7 +98,16 @@ async function createHightribeEvent(req, res, next) {
 
 async function createHightribeEventWithTickets(req, res, next) {
   try {
-    const data = await hightribe.createEventWithTickets(req.userId, req.body || {});
+    const files = Array.isArray(req.files) ? req.files : [];
+    const body = req.body || {};
+    if (!body.title && !body["title"]) {
+      return res.status(422).json({
+        success: false,
+        message:
+          "title is required. Send JSON or multipart FormData with a title field (cover uploads must use multipart).",
+      });
+    }
+    const data = await hightribe.createEventWithTickets(req.userId, body, files);
     res.status(201).json({ success: true, data });
   } catch (err) {
     if (err.name === "HightribeApiError") {

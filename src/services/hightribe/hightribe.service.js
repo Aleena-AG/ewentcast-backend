@@ -42,7 +42,68 @@ function normalizeHtTicketFlags(body) {
       return ticket;
     });
   }
+  // Flat multipart keys: tickets[0][show_ticket]=true
+  for (const key of Object.keys(out)) {
+    if (/^tickets\[\d+]\[show_ticket(_quantity)?]$/.test(key)) {
+      const v = out[key];
+      if (v === true || v === "true") out[key] = "1";
+      if (v === false || v === "false") out[key] = "0";
+    }
+  }
   return out;
+}
+
+function appendFormValue(form, key, value) {
+  if (value === undefined || value === null) return;
+  if (typeof File !== "undefined" && value instanceof File) {
+    form.append(key, value);
+    return;
+  }
+  if (Buffer.isBuffer(value)) {
+    form.append(key, new Blob([value]));
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => appendFormValue(form, `${key}[${i}]`, item));
+    return;
+  }
+  if (typeof value === "object") {
+    for (const [k, v] of Object.entries(value)) {
+      appendFormValue(form, `${key}[${k}]`, v);
+    }
+    return;
+  }
+  if (typeof value === "boolean") {
+    form.append(key, value ? "1" : "0");
+    return;
+  }
+  form.append(key, String(value));
+}
+
+function buildHtOutboundForm(fields, files = []) {
+  const form = new FormData();
+  const body = normalizeHtTicketFlags(fields || {});
+  for (const [key, value] of Object.entries(body)) {
+    // Skip empty file placeholders already handled via files[]
+    if (key === "cover_image" && (value === "" || value == null)) continue;
+    appendFormValue(form, key, value);
+  }
+  for (const f of files) {
+    const blob = new Blob([f.buffer], { type: f.mimetype || "application/octet-stream" });
+    form.append(f.fieldname || "cover_image", blob, f.originalname || "cover.jpg");
+  }
+  return form;
+}
+
+function htErrorMessage(data, status, text) {
+  if (data?.errors && typeof data.errors === "object") {
+    const parts = Object.entries(data.errors).flatMap(([field, msgs]) => {
+      const list = Array.isArray(msgs) ? msgs : [msgs];
+      return list.map((m) => `${field}: ${m}`);
+    });
+    if (parts.length) return parts.join("; ");
+  }
+  return String(data.message || data.error || text || `Hightribe HTTP ${status}`);
 }
 
 async function htRequest(userId, path, query = {}, opts = {}) {
@@ -53,19 +114,21 @@ async function htRequest(userId, path, query = {}, opts = {}) {
     if (v !== undefined && v !== "") url.searchParams.set(k, v);
   }
 
-  const init = {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
   };
-  if (opts.body != null && method !== "GET" && method !== "HEAD") {
-    init.body = JSON.stringify(opts.body);
+
+  let body;
+  if (opts.formData) {
+    body = opts.formData;
+    // Let fetch set multipart boundary — do not set Content-Type
+  } else if (opts.body != null && method !== "GET" && method !== "HEAD") {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify(opts.body);
   }
 
-  const res = await fetch(url.toString(), init);
+  const res = await fetch(url.toString(), { method, headers, body });
   const text = await res.text();
   let data = {};
   try {
@@ -74,25 +137,45 @@ async function htRequest(userId, path, query = {}, opts = {}) {
     data = { raw: text };
   }
   if (!res.ok) {
-    throw new HightribeApiError(
-      String(data.message || data.error || text || `Hightribe HTTP ${res.status}`),
-      res.status
-    );
+    throw new HightribeApiError(htErrorMessage(data, res.status, text), res.status);
   }
   return data;
 }
 
-async function createEvent(userId, body) {
-  return htRequest(userId, "events", {}, { method: "POST", body });
+async function createEvent(userId, body, files = []) {
+  const hasMultipart =
+    files.length > 0 ||
+    Object.keys(body || {}).some((k) => k.includes("["));
+
+  if (hasMultipart) {
+    return htRequest(userId, "events", {}, {
+      method: "POST",
+      formData: buildHtOutboundForm(body, files),
+    });
+  }
+  return htRequest(userId, "events", {}, {
+    method: "POST",
+    body: normalizeHtTicketFlags(body),
+  });
 }
 
-async function createEventWithTickets(userId, body) {
-  return htRequest(
-    userId,
-    "events/with-tickets",
-    {},
-    { method: "POST", body: normalizeHtTicketFlags(body) }
-  );
+async function createEventWithTickets(userId, body, files = []) {
+  const hasMultipart =
+    files.length > 0 ||
+    // Flat bracket keys mean the client used FormData
+    Object.keys(body || {}).some((k) => k.includes("["));
+
+  if (hasMultipart || files.length > 0) {
+    return htRequest(userId, "events/with-tickets", {}, {
+      method: "POST",
+      formData: buildHtOutboundForm(body, files),
+    });
+  }
+
+  return htRequest(userId, "events/with-tickets", {}, {
+    method: "POST",
+    body: normalizeHtTicketFlags(body),
+  });
 }
 
 async function fetchEventsPage(userId, page = 1, perPage = 50) {

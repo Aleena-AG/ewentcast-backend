@@ -61,8 +61,31 @@ async function listOrganizations(settings) {
   return ebRequest(settings, "users/me/organizations");
 }
 
+/**
+ * Eventbrite rejects create/update when both `summary` and `description`
+ * are set ("Summary and Description cannot both be provided.").
+ * Prefer `summary` (current EB listing teaser); drop deprecated `description`.
+ */
+function sanitizeEventbriteEventBody(body) {
+  if (!body || typeof body !== "object") return body;
+  const next = { ...body };
+  const event =
+    next.event && typeof next.event === "object" ? { ...next.event } : null;
+  const target = event || next;
+  const hasSummary =
+    target.summary != null && String(target.summary).trim() !== "";
+  if (hasSummary && target.description != null) {
+    delete target.description;
+  }
+  if (event) next.event = target;
+  return next;
+}
+
 async function createOrganizationEvent(settings, orgId, body) {
-  return ebRequest(settings, `organizations/${orgId}/events`, {}, { method: "POST", body });
+  return ebRequest(settings, `organizations/${orgId}/events`, {}, {
+    method: "POST",
+    body: sanitizeEventbriteEventBody(body),
+  });
 }
 
 async function fetchEventsForSync(settings) {

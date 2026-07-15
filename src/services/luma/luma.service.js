@@ -224,10 +224,19 @@ async function createEvent(settings, body) {
   return lumaRequest(settings, "POST", "/v1/event/create", { body });
 }
 
+async function createImageUploadUrl(settings, body = {}) {
+  return lumaRequest(settings, "POST", "/v1/images/create-upload-url", {
+    body: {
+      content_type: body.content_type || body.contentType || "image/jpeg",
+    },
+  });
+}
+
 module.exports = {
   LumaApiError,
   lumaRequest,
   createEvent,
+  createImageUploadUrl,
   listHostedEvents,
   listEventGuests,
   fetchEventsForSync,
