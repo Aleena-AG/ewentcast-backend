@@ -25,7 +25,12 @@ async function createOrganizationEvent(req, res, next) {
       req.params.orgId,
       req.body || {}
     );
-    res.status(201).json({ success: true, data });
+    // FE expects Eventbrite event fields (e.g. `id`) at the top level
+    res.status(201).json({
+      success: true,
+      ...(data && typeof data === "object" ? data : {}),
+      data,
+    });
   } catch (err) {
     if (err.name === "EventbriteApiError") {
       return res.status(err.statusCode || 400).json({

@@ -83,8 +83,14 @@ async function createHightribeEvent(req, res, next) {
         },
       });
     }
-    const data = await hightribe.createEvent(req.userId, body, files);
-    res.status(201).json({ success: true, data });
+    const raw = await hightribe.createEvent(req.userId, body, files);
+    // HT returns { data: event }; FE reads response.data.id — unwrap one level
+    const event = raw?.data ?? raw;
+    res.status(201).json({
+      success: true,
+      ...(raw && typeof raw === "object" ? raw : {}),
+      data: event,
+    });
   } catch (err) {
     if (err.name === "HightribeApiError") {
       return res.status(err.statusCode || 400).json({
@@ -107,8 +113,13 @@ async function createHightribeEventWithTickets(req, res, next) {
           "title is required. Send JSON or multipart FormData with a title field (cover uploads must use multipart).",
       });
     }
-    const data = await hightribe.createEventWithTickets(req.userId, body, files);
-    res.status(201).json({ success: true, data });
+    const raw = await hightribe.createEventWithTickets(req.userId, body, files);
+    const event = raw?.data ?? raw;
+    res.status(201).json({
+      success: true,
+      ...(raw && typeof raw === "object" ? raw : {}),
+      data: event,
+    });
   } catch (err) {
     if (err.name === "HightribeApiError") {
       return res.status(err.statusCode || 400).json({

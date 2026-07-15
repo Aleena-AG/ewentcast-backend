@@ -232,11 +232,78 @@ async function createImageUploadUrl(settings, body = {}) {
   });
 }
 
+function resolveEventId(source = {}) {
+  return String(
+    source.event_id || source.event_api_id || source.api_id || source.id || ""
+  ).trim();
+}
+
+function withEventIdFields(body = {}) {
+  const eventId = resolveEventId(body);
+  if (!eventId) return body;
+  return {
+    ...body,
+    event_id: eventId,
+    event_api_id: eventId,
+    api_id: body.api_id ?? eventId,
+  };
+}
+
+function ticketTypesQuery(query = {}) {
+  const eventId = resolveEventId(query);
+  if (!eventId) throw new LumaApiError("event_id required", 400);
+  return { ...query, event_id: eventId, event_api_id: eventId };
+}
+
+async function listTicketTypes(settings, query = {}) {
+  return lumaRequest(settings, "GET", "/v1/event/ticket-types/list", {
+    query: ticketTypesQuery(query),
+  });
+}
+
+async function createTicketType(settings, body = {}) {
+  const payload = withEventIdFields(body);
+  if (!resolveEventId(payload)) {
+    throw new LumaApiError("event_id required", 400);
+  }
+  return lumaRequest(settings, "POST", "/v1/event/ticket-types/create", {
+    body: payload,
+  });
+}
+
+async function updateTicketType(settings, body = {}) {
+  const b = { ...(body || {}) };
+  const ticketTypeId = String(
+    b.event_ticket_type_id ||
+      b.event_ticket_type_api_id ||
+      b.ticket_type_api_id ||
+      b.ticket_type_id ||
+      b.api_id ||
+      b.id ||
+      ""
+  ).trim();
+  if (!ticketTypeId) {
+    throw new LumaApiError("event_ticket_type_id required", 400);
+  }
+  const currency = b.currency != null ? String(b.currency).toLowerCase() : undefined;
+  const updateBody = {
+    ...b,
+    event_ticket_type_id: ticketTypeId,
+    ...(currency ? { currency } : {}),
+  };
+  return lumaRequest(settings, "POST", "/v1/event/ticket-types/update", {
+    body: updateBody,
+  });
+}
+
 module.exports = {
   LumaApiError,
   lumaRequest,
   createEvent,
   createImageUploadUrl,
+  listTicketTypes,
+  createTicketType,
+  updateTicketType,
   listHostedEvents,
   listEventGuests,
   fetchEventsForSync,
