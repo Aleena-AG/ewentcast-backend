@@ -10,11 +10,18 @@ async function loginHightribe(req, res, next) {
     const { email, password, serviceUrl } = req.body || {};
     const result = await hightribe.loginWithPassword({ email, password, serviceUrl });
 
-    // Persist token so settings.configured becomes true after connect
+    const htEmail = String(
+      result.user?.email || email || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    // Persist token + Hightribe account email
     const settings = await updateUserSettings(req.userId, {
       hightribe: {
         serviceUrl: result.serviceUrl,
         apiKey: result.token,
+        email: htEmail,
       },
     });
 
@@ -30,17 +37,21 @@ async function loginHightribe(req, res, next) {
       htToken: result.token,
     });
 
+    const publicSettings = toPublicSettingsView(settings);
+
     res.json({
       success: true,
       status: true,
       token: result.token,
       access_token: result.token,
       apiKey: result.token,
+      email: htEmail || null,
       user: result.user,
       message: result.message,
-      settings: toPublicSettingsView(settings),
+      settings: publicSettings,
       data: {
         token: result.token,
+        email: htEmail || null,
         user: result.user,
       },
     });

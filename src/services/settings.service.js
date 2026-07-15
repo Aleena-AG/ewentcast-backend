@@ -20,6 +20,7 @@ function defaultSettings() {
       serviceUrl: (process.env.HT_API_BASE || "https://api.hightribe.com").replace(/\/$/, ""),
       apiKey: "",
       webhookSecret: "",
+      email: "",
     },
   };
 }
@@ -41,10 +42,28 @@ function normalizeLumaStored(luma) {
   };
 }
 
+function normalizeHightribeStored(ht) {
+  if (!ht) return undefined;
+  let apiKey = String(ht.apiKey ?? ht.api_key ?? "").trim();
+  if (isMaskedSecret(apiKey)) apiKey = "";
+  return {
+    serviceUrl:
+      String(ht.serviceUrl ?? ht.service_url ?? "").replace(/\/$/, "") ||
+      "https://api.hightribe.com",
+    apiKey,
+    webhookSecret: String(ht.webhookSecret ?? ht.webhook_secret ?? ""),
+    email: String(ht.email || "").trim().toLowerCase(),
+  };
+}
+
 function normalizeStored(stored) {
   if (!stored) return null;
   const luma = normalizeLumaStored(stored.luma);
-  return luma ? { ...stored, luma } : stored;
+  const hightribe = normalizeHightribeStored(stored.hightribe);
+  let out = stored;
+  if (luma) out = { ...out, luma };
+  if (hightribe) out = { ...out, hightribe };
+  return out;
 }
 
 function mergeSettings(base, patch) {
@@ -111,6 +130,7 @@ function toPublicSettingsView(d) {
       serviceUrl: d.hightribe.serviceUrl,
       apiKey: maskSecret(d.hightribe.apiKey),
       webhookSecret: maskSecret(d.hightribe.webhookSecret),
+      email: d.hightribe.email || null,
       // Connected only when a real token/API key is saved — not merely serviceUrl
       // (default serviceUrl is always https://api.hightribe.com).
       configured: !!d.hightribe.apiKey && !isMaskedSecret(d.hightribe.apiKey),
@@ -158,6 +178,7 @@ async function clearChannelSettings(userId, channel) {
       ...empty.hightribe,
       apiKey: "",
       webhookSecret: "",
+      email: "",
     },
   });
 }

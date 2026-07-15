@@ -59,6 +59,14 @@ async function getAccountView(userId) {
       ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / 86400000))
       : null;
 
+  const settingsRow = await prisma.userSettings.findUnique({
+    where: { userId: user.id },
+    select: { settingsJson: true },
+  });
+  const htEmail = String(settingsRow?.settingsJson?.hightribe?.email || "")
+    .trim()
+    .toLowerCase();
+
   return {
     auth_source: user.authSource === "hightribe" ? "hightribe_native" : "ewentcast_signup",
     subscription_plan: sub?.plan || "pro_monthly_20",
@@ -67,9 +75,10 @@ async function getAccountView(userId) {
     trial_ends_at: trialEndsAt ? trialEndsAt.toISOString() : null,
     trial_days_remaining: daysLeft,
     current_period_end: sub?.currentPeriodEnd ? sub.currentPeriodEnd.toISOString() : null,
-    ht_connected: !!ht?.htUserId,
+    ht_connected: !!(ht?.htUserId || ht?.htToken),
     linked_ht_user_id: ht?.htUserId || null,
     ht_connected_at: ht?.connectedAt ? ht.connectedAt.toISOString() : null,
+    ht_email: htEmail || null,
     email_verified: !!user.emailVerifiedAt,
   };
 }
