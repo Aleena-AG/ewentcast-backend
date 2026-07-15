@@ -175,9 +175,81 @@ async function fetchBookingsForSync(userId) {
   return list;
 }
 
+async function loginWithPassword({ email, password, serviceUrl }) {
+  const base = (
+    serviceUrl ||
+    process.env.HT_API_BASE ||
+    "https://api.hightribe.com"
+  ).replace(/\/$/, "");
+
+  const emailTrim = String(email || "").trim();
+  const pass = String(password || "");
+  if (!emailTrim || !pass) {
+    throw new HightribeApiError("Email and password are required", 422);
+  }
+
+  const res = await fetch(`${base}/api/login`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email: emailTrim, password: pass }),
+  });
+
+  const text = await res.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!res.ok) {
+    throw new HightribeApiError(
+      String(data.message || data.error || text || `Hightribe login HTTP ${res.status}`),
+      res.status >= 400 && res.status < 600 ? res.status : 400
+    );
+  }
+
+  const nested = data.data && typeof data.data === "object" ? data.data : null;
+  const tokenRaw =
+    data.token ||
+    data.access_token ||
+    data.apiKey ||
+    data.api_key ||
+    nested?.token ||
+    nested?.access_token ||
+    nested?.apiKey ||
+    nested?.api_key ||
+    "";
+
+  const token = String(tokenRaw || "").trim().replace(/^Bearer\s+/i, "");
+  if (!token) {
+    throw new HightribeApiError("Hightribe login succeeded but no token was returned", 502);
+  }
+
+  const user =
+    data.user ||
+    nested?.user ||
+    (data.data && typeof data.data === "object" && !Array.isArray(data.data) ? data.data : null);
+
+  return {
+    success: true,
+    status: true,
+    token,
+    access_token: token,
+    apiKey: token,
+    user: user || undefined,
+    serviceUrl: base,
+    message: data.message || "Login successful",
+  };
+}
+
 module.exports = {
   HightribeApiError,
   htRequest,
+  loginWithPassword,
   createEvent,
   createEventWithTickets,
   fetchEventsPage,
