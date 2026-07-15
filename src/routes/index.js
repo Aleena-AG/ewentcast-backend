@@ -9,6 +9,8 @@ const webhooksRoutes = require("./webhooks.routes");
 const lumaRoutes = require("./luma.routes");
 const hightribeRoutes = require("./hightribe.routes");
 const eventbriteRoutes = require("./eventbrite.routes");
+const dashboardRoutes = require("./dashboard.routes");
+const billingRoutes = require("./billing.routes");
 
 const router = express.Router();
 
@@ -22,5 +24,7 @@ router.use("/webhooks", webhooksRoutes);
 router.use("/luma", lumaRoutes);
 router.use("/hightribe", hightribeRoutes);
 router.use("/eventbrite", eventbriteRoutes);
+router.use("/dashboard", dashboardRoutes);
+router.use("/billing", billingRoutes);
 
 module.exports = router;

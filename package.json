@@ -23,7 +23,8 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "morgan": "^1.11.0"
+    "morgan": "^1.11.0",
+    "stripe": "^22.3.1"
   },
   "devDependencies": {
     "jest": "^30.4.2",

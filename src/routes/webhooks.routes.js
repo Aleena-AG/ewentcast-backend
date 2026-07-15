@@ -17,6 +17,7 @@ router.post("/luma", lumaWebhook);
 router.post("/eventbrite", eventbriteWebhook);
 router.post("/hightribe", hightribeWebhook);
 router.get("/hightribe", hightribeWebhookInfo);
+// Stripe webhook is mounted with raw body in app.js (signature verify)
 
 // Authenticated setup + ops
 router.get("/setup", requireAuth, getSetup);
