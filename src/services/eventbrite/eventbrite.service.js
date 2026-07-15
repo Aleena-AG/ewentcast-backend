@@ -88,6 +88,36 @@ async function createOrganizationEvent(settings, orgId, body) {
   });
 }
 
+/**
+ * Forward any remaining /eventbrite/* path to Eventbrite v3.
+ * Path is relative (e.g. events/123/structured_content/).
+ */
+async function proxyToEventbrite(settings, method, path, query = {}, body) {
+  const clean = String(path || "")
+    .replace(/^\/+/, "")
+    .replace(/\?.*$/, "");
+  if (!clean) {
+    throw new EventbriteApiError("Eventbrite path required", 400);
+  }
+
+  const upper = String(method || "GET").toUpperCase();
+  let outboundBody = body;
+  if (
+    outboundBody &&
+    upper !== "GET" &&
+    upper !== "HEAD" &&
+    /(^|\/)events(\/|$)/.test(clean) &&
+    outboundBody.event
+  ) {
+    outboundBody = sanitizeEventbriteEventBody(outboundBody);
+  }
+
+  return ebRequest(settings, clean, query, {
+    method: upper,
+    body: upper === "GET" || upper === "HEAD" ? undefined : outboundBody,
+  });
+}
+
 async function fetchEventsForSync(settings) {
   const orgData = await ebRequest(settings, "users/me/organizations");
   const orgId = orgData.organizations?.[0]?.id;
@@ -171,6 +201,8 @@ module.exports = {
   ebRequest,
   listOrganizations,
   createOrganizationEvent,
+  proxyToEventbrite,
+  sanitizeEventbriteEventBody,
   fetchEventsForSync,
   fetchBookingsForSync,
 };
