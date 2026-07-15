@@ -109,8 +109,12 @@ function toPublicSettingsView(d) {
     },
     hightribe: {
       serviceUrl: d.hightribe.serviceUrl,
+      apiKey: maskSecret(d.hightribe.apiKey),
       webhookSecret: maskSecret(d.hightribe.webhookSecret),
-      configured: !!d.hightribe.serviceUrl,
+      // Connected only when a real token/API key is saved — not merely serviceUrl
+      // (default serviceUrl is always https://api.hightribe.com).
+      configured: !!d.hightribe.apiKey && !isMaskedSecret(d.hightribe.apiKey),
+      hasApiKey: !!d.hightribe.apiKey && !isMaskedSecret(d.hightribe.apiKey),
       hasWebhookSecret: !!d.hightribe.webhookSecret,
     },
   };
@@ -146,7 +150,16 @@ async function clearChannelSettings(userId, channel) {
   const empty = defaultSettings();
   if (channel === "luma") return updateUserSettings(userId, { luma: empty.luma });
   if (channel === "eventbrite") return updateUserSettings(userId, { eventbrite: empty.eventbrite });
-  return updateUserSettings(userId, { hightribe: empty.hightribe });
+
+  // Hightribe: wipe token + ht_connections so GET settings stays disconnected after refresh
+  await prisma.htConnection.deleteMany({ where: { userId: BigInt(userId) } });
+  return updateUserSettings(userId, {
+    hightribe: {
+      ...empty.hightribe,
+      apiKey: "",
+      webhookSecret: "",
+    },
+  });
 }
 
 async function getHtConnection(userId) {
