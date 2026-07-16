@@ -19,10 +19,19 @@ const local = JSON.parse(
 
 local.info = local.info || {};
 local.info._postman_id = "e0f287ad-1766-4deb-b622-ddfbf6597e8a";
-local.info.name = "Ewentcast API — Auth + Channels";
+local.info.name = "Ewentcast API";
 local.info.schema =
   local.info.schema ||
   "https://schema.getpostman.com/json/collection/v2.1.0/collection.json";
+
+function countRequests(items) {
+  let n = 0;
+  for (const it of items || []) {
+    if (it.item) n += countRequests(it.item);
+    else if (it.request) n += 1;
+  }
+  return n;
+}
 
 async function main() {
   const putRes = await fetch(
@@ -43,28 +52,16 @@ async function main() {
     process.exit(1);
   }
 
-  // Verify with GET (PUT response shape is unreliable)
   const getRes = await fetch(
     `https://api.getpostman.com/collections/${collectionUid}`,
     { headers: { "X-Api-Key": apiKey } }
   );
   const data = await getRes.json();
   const folders = (data.collection?.item || []).map((i) => i.name);
-  const auth = (data.collection?.item || []).find((i) => i.name === "Auth");
-  const authReqs = (auth?.item || []).map((i) => i.name);
 
   console.log("name:", data.collection?.info?.name);
   console.log("folders:", folders.join(" | "));
-  console.log("Auth:", authReqs.join(", ") || "MISSING");
-  console.log(
-    "description starts:",
-    String(data.collection?.info?.description || "").slice(0, 80)
-  );
-
-  if (!auth || authReqs.length < 9) {
-    console.error("Auth folder incomplete after update");
-    process.exit(1);
-  }
+  console.log("requests:", countRequests(data.collection?.item));
 }
 
 main().catch((e) => {

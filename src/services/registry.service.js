@@ -1,11 +1,99 @@
 const prisma = require("../config/db");
-const { parseChannel } = require("./channels/helpers");
+const { parseChannel, PRISMA_MODEL } = require("./channels/helpers");
 const { mirrorMasterToChannelEvents } = require("./channels/mirror-master.service");
 
 const MASTER_INCLUDE = {
   channelRefs: true,
   attendees: { orderBy: { registeredAt: "desc" } },
 };
+
+/** Map channel-native status → published | draft | null */
+function toPublishState(status) {
+  if (!status) return null;
+  const s = String(status).toLowerCase().trim();
+  if (["draft", "unpublished", "private", "not_published"].includes(s)) {
+    return "draft";
+  }
+  if (
+    [
+      "published",
+      "live",
+      "started",
+      "ended",
+      "completed",
+      "approved",
+      "public",
+      "active",
+    ].includes(s)
+  ) {
+    return "published";
+  }
+  return null;
+}
+
+/**
+ * Load status for channel refs from luma/eventbrite/hightribe event tables.
+ * Returns Map `"channel:eventId"` → `{ status, publishState }`
+ */
+async function loadChannelPublishStatuses(userId, channelRefs) {
+  const map = new Map();
+  if (userId == null || !channelRefs?.length) return map;
+
+  const byChannel = { luma: [], eventbrite: [], hightribe: [] };
+  for (const ref of channelRefs) {
+    if (!ref.eventId || !byChannel[ref.channel]) continue;
+    byChannel[ref.channel].push(String(ref.eventId));
+  }
+
+  const uid = BigInt(userId);
+  await Promise.all(
+    Object.entries(byChannel).map(async ([channel, ids]) => {
+      const unique = [...new Set(ids)];
+      if (!unique.length) return;
+      const model = PRISMA_MODEL[channel];
+      const rows = await prisma[model].findMany({
+        where: { userId: uid, externalId: { in: unique } },
+        select: { externalId: true, status: true },
+      });
+      for (const row of rows) {
+        map.set(`${channel}:${row.externalId}`, {
+          status: row.status || null,
+          publishState: toPublishState(row.status),
+        });
+      }
+    })
+  );
+
+  return map;
+}
+
+function enrichChannelRefs(channelRefs, statusMap) {
+  return (channelRefs || []).map((ref) => {
+    const info = statusMap.get(`${ref.channel}:${ref.eventId}`) || {
+      status: null,
+      publishState: null,
+    };
+    return {
+      ...ref,
+      status: info.status,
+      publishState: info.publishState,
+    };
+  });
+}
+
+/** Attach per-channel status + publishState onto a master event (Prisma shape). */
+async function withChannelPublishStatus(event) {
+  if (!event) return event;
+  const statusMap = await loadChannelPublishStatuses(event.userId, event.channelRefs);
+  return {
+    ...event,
+    channelRefs: enrichChannelRefs(event.channelRefs, statusMap),
+  };
+}
+
+async function withChannelPublishStatusMany(events) {
+  return Promise.all(events.map((e) => withChannelPublishStatus(e)));
+}
 
 async function getMasterEvent(masterId) {
   const row = await prisma.masterEvent.findUnique({
@@ -14,12 +102,20 @@ async function getMasterEvent(masterId) {
   });
   if (!row) return null;
 
+  const statusMap = await loadChannelPublishStatuses(row.userId, row.channelRefs);
+
   const channels = {};
   for (const ref of row.channelRefs) {
+    const info = statusMap.get(`${ref.channel}:${ref.eventId}`) || {
+      status: null,
+      publishState: null,
+    };
     channels[ref.channel] = {
       eventId: ref.eventId,
       ticketId: ref.ticketId,
       url: ref.url,
+      status: info.status,
+      publishState: info.publishState,
     };
   }
 
@@ -40,7 +136,7 @@ async function getMasterEvent(masterId) {
     details: row.detailsJson || null,
     userId: row.userId != null ? Number(row.userId) : null,
     channels,
-    channelRefs: row.channelRefs,
+    channelRefs: enrichChannelRefs(row.channelRefs, statusMap),
     attendees: row.attendees.map((a) => ({
       email: a.email,
       name: a.name,
@@ -200,4 +296,7 @@ module.exports = {
   deleteMasterEvent,
   linkChannel,
   unlinkChannel,
+  toPublishState,
+  withChannelPublishStatus,
+  withChannelPublishStatusMany,
 };

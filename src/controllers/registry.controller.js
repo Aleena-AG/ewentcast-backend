@@ -8,6 +8,8 @@ const {
   unlinkChannel,
   registerAttendee,
   registerAttendeeByChannel,
+  withChannelPublishStatus,
+  withChannelPublishStatusMany,
 } = require("../services/registry.service");
 const { mirrorMasterToChannelEvents } = require("../services/channels/mirror-master.service");
 const {
@@ -169,7 +171,8 @@ async function listMasterEvents(req, res, next) {
       include: MASTER_INCLUDE,
       orderBy: { updatedAt: "desc" },
     });
-    res.json({ success: true, data: events.map(toPublicMaster) });
+    const enriched = await withChannelPublishStatusMany(events);
+    res.json({ success: true, data: enriched.map(toPublicMaster) });
   } catch (err) {
     next(err);
   }
@@ -186,7 +189,8 @@ async function getMasterEvent(req, res, next) {
       return res.status(404).json({ success: false, message: "Master event not found" });
     }
 
-    res.json({ success: true, data: toPublicMaster(event) });
+    const enriched = await withChannelPublishStatus(event);
+    res.json({ success: true, data: toPublicMaster(enriched) });
   } catch (err) {
     next(err);
   }
@@ -217,7 +221,8 @@ async function createMasterEvent(req, res, next) {
 
     await mirrorMasterToChannelEvents(req.userId, event);
 
-    res.status(201).json({ success: true, data: toPublicMaster(event) });
+    const enriched = await withChannelPublishStatus(event);
+    res.status(201).json({ success: true, data: toPublicMaster(enriched) });
   } catch (err) {
     next(err);
   }
@@ -276,9 +281,10 @@ async function updateMasterEvent(req, res, next) {
       channelUpdates = await propagateMasterToChannels(req.userId, event);
     }
 
+    const enriched = await withChannelPublishStatus(event);
     res.json({
       success: true,
-      data: toPublicMaster(event),
+      data: toPublicMaster(enriched),
       channelUpdates,
     });
   } catch (err) {
