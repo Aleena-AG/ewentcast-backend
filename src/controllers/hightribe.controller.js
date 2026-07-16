@@ -342,6 +342,49 @@ async function updateHightribeEvent(req, res, next) {
   }
 }
 
+/**
+ * Catch-all: /api/v1/hightribe/* → Hightribe /api/*
+ * Covers tickets, bookings variants, and other FE paths.
+ */
+async function proxyHightribe(req, res, next) {
+  try {
+    const splat = req.params.path;
+    const fromSplat = Array.isArray(splat)
+      ? splat.join("/")
+      : splat != null
+        ? String(splat)
+        : "";
+    const path = (fromSplat || req.path || "").replace(/^\/+/, "");
+    if (!path) {
+      return res.status(400).json({ success: false, message: "path required" });
+    }
+
+    const files = Array.isArray(req.files) ? req.files : [];
+    const raw = await hightribe.proxyRequest(
+      req.userId,
+      req.method,
+      path,
+      req.query || {},
+      req.body || {},
+      files
+    );
+
+    res.json({
+      success: true,
+      ...(raw && typeof raw === "object" ? raw : {}),
+      data: raw?.data ?? raw,
+    });
+  } catch (err) {
+    if (err.name === "HightribeApiError") {
+      return res.status(err.statusCode || 400).json({
+        success: false,
+        message: err.message,
+      });
+    }
+    next(err);
+  }
+}
+
 module.exports = {
   loginHightribe,
   createHightribeEvent,
@@ -350,4 +393,5 @@ module.exports = {
   listHightribeEvents,
   getHightribeEvent,
   updateHightribeEvent,
+  proxyHightribe,
 };

@@ -81,6 +81,86 @@ function sanitizeEventbriteEventBody(body) {
   return next;
 }
 
+function truthyFlag(v) {
+  if (v === true || v === 1) return true;
+  if (v === false || v === 0 || v == null) return false;
+  const s = String(v).trim().toLowerCase();
+  return s === "true" || s === "1" || s === "yes";
+}
+
+function costIsZero(cost) {
+  if (cost == null || cost === "") return true;
+  if (typeof cost === "number") return !Number.isFinite(cost) || cost <= 0;
+  if (typeof cost === "object") {
+    const value = Number(cost.value ?? cost.major_value ?? cost.amount);
+    return !Number.isFinite(value) || value <= 0;
+  }
+  const s = String(cost).trim();
+  // Formats: "USD,0" | "USD,000" | "0" | "USD,0.00"
+  const m = s.match(/^[A-Z]{3},(.+)$/i) || s.match(/^(.+)$/);
+  const amount = Number(String(m?.[1] ?? s).replace(/[^\d.-]/g, ""));
+  return !Number.isFinite(amount) || amount <= 0;
+}
+
+/**
+ * Normalize ticket_class cost to Eventbrite string form "USD,1000".
+ * Free / zero-cost tickets must omit `cost` entirely ("Free ticket classes should not have a cost.").
+ */
+function sanitizeTicketClassFields(tc) {
+  if (!tc || typeof tc !== "object") return tc;
+  const next = { ...tc };
+
+  const isFree =
+    truthyFlag(next.free) ||
+    truthyFlag(next.is_free) ||
+    costIsZero(next.cost);
+
+  if (isFree) {
+    next.free = true;
+    delete next.cost;
+    delete next.is_free;
+    // Fees only apply to paid tickets
+    delete next.include_fee;
+    delete next.fee;
+    return next;
+  }
+
+  next.free = false;
+  if (next.cost != null && typeof next.cost === "object") {
+    const currency = String(
+      next.cost.currency || next.cost.currency_code || "USD"
+    )
+      .trim()
+      .toUpperCase() || "USD";
+    const value = Number(next.cost.value ?? next.cost.major_value ?? 0);
+    if (Number.isFinite(value) && value > 0) {
+      next.cost = `${currency},${Math.round(value)}`;
+    } else {
+      next.free = true;
+      delete next.cost;
+    }
+  }
+
+  return next;
+}
+
+function sanitizeEventbriteTicketClassBody(body) {
+  if (!body || typeof body !== "object") return body;
+  const next = { ...body };
+  if (next.ticket_class && typeof next.ticket_class === "object") {
+    next.ticket_class = sanitizeTicketClassFields(next.ticket_class);
+  } else if (
+    next.name != null ||
+    next.cost != null ||
+    next.free != null ||
+    next.quantity_total != null
+  ) {
+    // Bare ticket_class fields at top level
+    return sanitizeTicketClassFields(next);
+  }
+  return next;
+}
+
 async function createOrganizationEvent(settings, orgId, body) {
   return ebRequest(settings, `organizations/${orgId}/events`, {}, {
     method: "POST",
@@ -171,14 +251,12 @@ async function proxyToEventbrite(settings, method, path, query = {}, body) {
 
   const upper = String(method || "GET").toUpperCase();
   let outboundBody = body;
-  if (
-    outboundBody &&
-    upper !== "GET" &&
-    upper !== "HEAD" &&
-    /(^|\/)events(\/|$)/.test(clean) &&
-    outboundBody.event
-  ) {
-    outboundBody = sanitizeEventbriteEventBody(outboundBody);
+  if (outboundBody && upper !== "GET" && upper !== "HEAD") {
+    if (/(^|\/)ticket_classes(\/|$)/i.test(clean)) {
+      outboundBody = sanitizeEventbriteTicketClassBody(outboundBody);
+    } else if (/(^|\/)events(\/|$)/.test(clean) && outboundBody.event) {
+      outboundBody = sanitizeEventbriteEventBody(outboundBody);
+    }
   }
 
   return ebRequest(settings, clean, sanitizeEbQuery(clean, query), {
@@ -272,6 +350,7 @@ module.exports = {
   updateEvent,
   proxyToEventbrite,
   sanitizeEventbriteEventBody,
+  sanitizeEventbriteTicketClassBody,
   fetchEventsForSync,
   fetchBookingsForSync,
 };

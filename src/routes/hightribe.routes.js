@@ -9,6 +9,7 @@ const {
   listHightribeEvents,
   getHightribeEvent,
   updateHightribeEvent,
+  proxyHightribe,
 } = require("../controllers/hightribe.controller");
 
 const router = express.Router();
@@ -41,5 +42,8 @@ router.post(
   createHightribeEventWithTickets
 );
 router.post("/events", optionalMultipart, createHightribeEvent);
+
+// tickets?ticketable_type=event&ticketable_id=… and any other HT API path
+router.all("/{*path}", optionalMultipart, proxyHightribe);
 
 module.exports = router;

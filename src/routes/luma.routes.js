@@ -3,6 +3,7 @@ const { requireAuth } = require("../middlewares/requireAuth");
 const {
   createLumaEvent,
   getLumaEvent,
+  updateLumaEvent,
   createLumaImageUploadUrl,
   listLumaTicketTypes,
   createLumaTicketType,
@@ -16,6 +17,8 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.get("/events", getLumaEvent);
+router.put("/events", updateLumaEvent);
+router.patch("/events", updateLumaEvent);
 router.get("/guests", listLumaGuests);
 router.post("/events", createLumaEvent);
 router.post("/images/upload-url", createLumaImageUploadUrl);
