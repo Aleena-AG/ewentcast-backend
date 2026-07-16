@@ -156,6 +156,8 @@ async function eventbriteWebhook(req, res) {
       return res.status(200).json(responseBody);
     }
 
+    const isEventWebhook = /^event\./i.test(action);
+
     let eventId = "";
     let email = "";
     let name = "";
@@ -194,13 +196,26 @@ async function eventbriteWebhook(req, res) {
       if (match) eventId = match[1];
     }
 
+    if (isEventWebhook) {
+      statusCode = 200;
+      outcome = "skipped";
+      responseBody = {
+        ok: true,
+        skipped: "event webhook (no attendee registration)",
+        action,
+        eventId: eventId || undefined,
+      };
+      return res.status(200).json(responseBody);
+    }
+
     if (!eventId || !email) {
       statusCode = 200;
       outcome = "skipped";
       responseBody = {
         ok: true,
-        skipped: "could not parse eventbrite payload",
+        skipped: eventId ? "missing attendee email" : "could not parse eventbrite payload",
         action,
+        eventId: eventId || undefined,
       };
       return res.status(200).json(responseBody);
     }
