@@ -218,4 +218,4 @@ collection.item = collection.item.filter((f) => f.name !== "Auth");
 collection.item.unshift(authFolder);
 
 fs.writeFileSync(collectionPath, JSON.stringify(collection, null, 2));
-console.log("Local Postman collection updated with Auth folder");
+console.log("Local Postman collection updated with Auth folder 99999");

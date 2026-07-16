@@ -1,5 +1,11 @@
 const prisma = require("../config/db");
-const { PRISMA_MODEL } = require("./channels/helpers");
+const { parseChannel, PRISMA_MODEL } = require("./channels/helpers");
+const { mirrorMasterToChannelEvents } = require("./channels/mirror-master.service");
+
+const MASTER_INCLUDE = {
+  channelRefs: true,
+  attendees: { orderBy: { registeredAt: "desc" } },
+};
 
 /** Map channel-native status → published | draft | null */
 function toPublishState(status) {
@@ -92,10 +98,7 @@ async function withChannelPublishStatusMany(events) {
 async function getMasterEvent(masterId) {
   const row = await prisma.masterEvent.findUnique({
     where: { id: masterId },
-    include: {
-      channelRefs: true,
-      attendees: { orderBy: { registeredAt: "desc" } },
-    },
+    include: MASTER_INCLUDE,
   });
   if (!row) return null;
 
@@ -121,8 +124,19 @@ async function getMasterEvent(masterId) {
     title: row.title,
     capacity: row.capacity,
     sold: row.sold,
+    category: row.category || null,
+    timezone: row.timezone || null,
+    description: row.description || null,
+    format: row.format || null,
+    startAt: row.startAt ? row.startAt.toISOString() : null,
+    endAt: row.endAt ? row.endAt.toISOString() : null,
+    locationJson: row.locationJson || null,
+    detailsJson: row.detailsJson || null,
+    location: row.locationJson || null,
+    details: row.detailsJson || null,
     userId: row.userId != null ? Number(row.userId) : null,
     channels,
+    channelRefs: enrichChannelRefs(row.channelRefs, statusMap),
     attendees: row.attendees.map((a) => ({
       email: a.email,
       name: a.name,
@@ -132,6 +146,13 @@ async function getMasterEvent(masterId) {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+async function findOwnedMaster(masterId, userId) {
+  return prisma.masterEvent.findFirst({
+    where: { id: masterId, userId: BigInt(userId) },
+    select: { id: true },
+  });
 }
 
 async function findMasterContextByChannelEvent(channel, eventId) {
@@ -177,17 +198,104 @@ async function registerAttendee(masterId, attendee) {
       data: { sold: { increment: 1 } },
     });
   } catch (err) {
-    // unique (masterId, email) — already registered
     if (err.code !== "P2002") throw err;
   }
 
   return getMasterEvent(masterId);
 }
 
+async function deleteMasterEvent(masterId, userId) {
+  const owned = await findOwnedMaster(masterId, userId);
+  if (!owned) return false;
+  await prisma.masterEvent.delete({ where: { id: masterId } });
+  return true;
+}
+
+async function linkChannel(masterId, userId, ref) {
+  const owned = await findOwnedMaster(masterId, userId);
+  if (!owned) return null;
+
+  const channel = parseChannel(ref.channel);
+  if (!channel) {
+    const err = new Error(`invalid channel: ${ref.channel}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  await prisma.channelRef.upsert({
+    where: {
+      masterId_channel: { masterId, channel },
+    },
+    create: {
+      masterId,
+      channel,
+      eventId: ref.eventId || "",
+      ticketId: ref.ticketId || null,
+      url: ref.url || null,
+    },
+    update: {
+      eventId: ref.eventId ?? undefined,
+      ticketId: ref.ticketId !== undefined ? ref.ticketId : undefined,
+      url: ref.url !== undefined ? ref.url : undefined,
+    },
+  });
+
+  const master = await prisma.masterEvent.findUnique({
+    where: { id: masterId },
+    include: { channelRefs: true },
+  });
+  await mirrorMasterToChannelEvents(userId, master);
+
+  return getMasterEvent(masterId);
+}
+
+async function unlinkChannel(masterId, userId, channelRaw) {
+  const owned = await findOwnedMaster(masterId, userId);
+  if (!owned) return null;
+
+  const channel = parseChannel(channelRaw);
+  if (!channel) {
+    const err = new Error(`invalid channel: ${channelRaw}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  await prisma.channelRef.deleteMany({
+    where: { masterId, channel },
+  });
+
+  return getMasterEvent(masterId);
+}
+
+async function registerAttendeeByChannel({ channel, eventId, email, name, registeredAt, status }) {
+  const parsed = parseChannel(channel);
+  if (!parsed) {
+    const err = new Error(`invalid channel: ${channel}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const ctx = await findMasterContextByChannelEvent(parsed, eventId);
+  if (!ctx) return null;
+
+  return registerAttendee(ctx.masterId, {
+    email,
+    name: name || email.split("@")[0] || "Guest",
+    source: parsed,
+    registeredAt,
+    status,
+  });
+}
+
 module.exports = {
   getMasterEvent,
+  findOwnedMaster,
   findMasterContextByChannelEvent,
   registerAttendee,
+  registerAttendeeByChannel,
+  deleteMasterEvent,
+  linkChannel,
+  unlinkChannel,
   toPublishState,
   withChannelPublishStatus,
   withChannelPublishStatusMany,

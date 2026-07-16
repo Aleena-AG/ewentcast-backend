@@ -17,8 +17,9 @@ function getToken(settings) {
   return token;
 }
 
-async function ebRequest(settings, path, query = {}) {
+async function ebRequest(settings, path, query = {}, opts = {}) {
   const token = getToken(settings);
+  const method = opts.method || "GET";
   const url = new URL(`https://www.eventbriteapi.com/v3/${path.replace(/^\//, "")}`);
   if (!url.pathname.endsWith("/")) {
     url.pathname = `${url.pathname}/`;
@@ -27,12 +28,19 @@ async function ebRequest(settings, path, query = {}) {
     if (v !== undefined && v !== "") url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString(), {
+  const init = {
+    method,
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
     },
-  });
+  };
+  if (opts.body != null && method !== "GET" && method !== "HEAD") {
+    init.headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(opts.body);
+  }
+
+  const res = await fetch(url.toString(), init);
   const text = await res.text();
   let data = {};
   try {
@@ -47,6 +55,78 @@ async function ebRequest(settings, path, query = {}) {
     );
   }
   return data;
+}
+
+async function listOrganizations(settings) {
+  return ebRequest(settings, "users/me/organizations");
+}
+
+/**
+ * Eventbrite rejects create/update when both `summary` and `description`
+ * are set ("Summary and Description cannot both be provided.").
+ * Prefer `summary` (current EB listing teaser); drop deprecated `description`.
+ */
+function sanitizeEventbriteEventBody(body) {
+  if (!body || typeof body !== "object") return body;
+  const next = { ...body };
+  const event =
+    next.event && typeof next.event === "object" ? { ...next.event } : null;
+  const target = event || next;
+  const hasSummary =
+    target.summary != null && String(target.summary).trim() !== "";
+  if (hasSummary && target.description != null) {
+    delete target.description;
+  }
+  if (event) next.event = target;
+  return next;
+}
+
+async function createOrganizationEvent(settings, orgId, body) {
+  return ebRequest(settings, `organizations/${orgId}/events`, {}, {
+    method: "POST",
+    body: sanitizeEventbriteEventBody(body),
+  });
+}
+
+/**
+ * Forward any remaining /eventbrite/* path to Eventbrite v3.
+ * Path is relative (e.g. events/123/structured_content/).
+ */
+/**
+ * Attendees list rejects `page_size` (fixed at 50). Events list still accepts it.
+ */
+function sanitizeEbQuery(path, query = {}) {
+  const next = { ...query };
+  if (/(^|\/)attendees(\/|$)/i.test(path) && next.page_size != null) {
+    delete next.page_size;
+  }
+  return next;
+}
+
+async function proxyToEventbrite(settings, method, path, query = {}, body) {
+  const clean = String(path || "")
+    .replace(/^\/+/, "")
+    .replace(/\?.*$/, "");
+  if (!clean) {
+    throw new EventbriteApiError("Eventbrite path required", 400);
+  }
+
+  const upper = String(method || "GET").toUpperCase();
+  let outboundBody = body;
+  if (
+    outboundBody &&
+    upper !== "GET" &&
+    upper !== "HEAD" &&
+    /(^|\/)events(\/|$)/.test(clean) &&
+    outboundBody.event
+  ) {
+    outboundBody = sanitizeEventbriteEventBody(outboundBody);
+  }
+
+  return ebRequest(settings, clean, sanitizeEbQuery(clean, query), {
+    method: upper,
+    body: upper === "GET" || upper === "HEAD" ? undefined : outboundBody,
+  });
 }
 
 async function fetchEventsForSync(settings) {
@@ -105,7 +185,6 @@ async function fetchBookingsForSync(settings, events) {
             const data = await ebRequest(settings, `events/${e.id}/attendees`, {
               status: "attending",
               page: String(page),
-              page_size: "50",
             });
             for (const raw of data.attendees || []) {
               const item = normalizeEbAttendee(raw, eventTitle);
@@ -130,6 +209,10 @@ async function fetchBookingsForSync(settings, events) {
 module.exports = {
   EventbriteApiError,
   ebRequest,
+  listOrganizations,
+  createOrganizationEvent,
+  proxyToEventbrite,
+  sanitizeEventbriteEventBody,
   fetchEventsForSync,
   fetchBookingsForSync,
 };

@@ -7,6 +7,7 @@ const {
   syncEvents,
   syncBookings,
   syncFromApi,
+  syncAllFromApi,
   purgeChannel,
   removeEvent,
 } = require("../controllers/events.controller");
@@ -16,6 +17,7 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.get("/bookings", listBookings);
+router.post("/sync-all", syncAllFromApi);
 router.post("/:channel/sync", syncEvents);
 router.post("/:channel/sync-bookings", syncBookings);
 router.post("/:channel/sync-from-api", syncFromApi);

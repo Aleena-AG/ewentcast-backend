@@ -11,8 +11,12 @@ const {
   upsertChannelBookings,
 } = require("../services/channels/bookings.service");
 const { purgeChannelData } = require("../services/channels/channel-data.service");
-const { syncChannelDataToDb } = require("../services/channels/sync.service");
+const {
+  syncChannelDataToDb,
+  syncAllChannelsToDb,
+} = require("../services/channels/sync.service");
 const { serialize } = require("../utils/serialize");
+const { CHANNELS } = require("../services/channels/helpers");
 
 async function listBookings(req, res, next) {
   try {
@@ -111,6 +115,19 @@ async function syncFromApi(req, res, next) {
   }
 }
 
+async function syncAllFromApi(req, res, next) {
+  try {
+    const results = await syncAllChannelsToDb(req.userId);
+    const anyOk = CHANNELS.some((ch) => results[ch]?.success);
+    res.status(anyOk ? 200 : 502).json({
+      success: anyOk,
+      data: results,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function purgeChannel(req, res, next) {
   try {
     const channel = parseChannel(req.params.channel);
@@ -144,6 +161,7 @@ module.exports = {
   syncEvents,
   syncBookings,
   syncFromApi,
+  syncAllFromApi,
   purgeChannel,
   removeEvent,
 };

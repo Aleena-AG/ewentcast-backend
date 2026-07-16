@@ -219,9 +219,231 @@ async function fetchBookingsForSync(settings, events) {
   return bookings;
 }
 
+/** Flatten nested `{ event: {...} }` create/get payloads for the frontend. */
+function flattenLumaEventPayload(data) {
+  if (!data || typeof data !== "object") return {};
+  const event =
+    data.event && typeof data.event === "object" && !Array.isArray(data.event)
+      ? data.event
+      : data;
+  const id = String(event.id || event.api_id || data.id || data.api_id || "").trim();
+  const url = String(event.url || data.url || "").trim() || null;
+  return {
+    ...data,
+    ...event,
+    id: id || undefined,
+    api_id: id || undefined,
+    url,
+  };
+}
+
+async function getEvent(settings, eventId) {
+  const id = String(eventId || "").trim();
+  if (!id) throw new LumaApiError("event_id required", 400);
+
+  const attempts = [
+    { path: "/v1/events/get", query: { id } },
+    { path: "/v1/events/get", query: { event_id: id } },
+    { path: "/v1/event/get", query: { api_id: id } },
+    { path: "/v1/event/get", query: { event_api_id: id } },
+  ];
+
+  let lastErr = null;
+  for (const { path, query } of attempts) {
+    try {
+      const raw = await lumaRequest(settings, "GET", path, { query });
+      return flattenLumaEventPayload(raw);
+    } catch (e) {
+      if (e instanceof LumaApiError) lastErr = e;
+    }
+  }
+  throw lastErr || new LumaApiError(`Could not get Luma event ${id}`, 404);
+}
+
+async function createEvent(settings, body) {
+  let raw;
+  try {
+    raw = await lumaRequest(settings, "POST", "/v1/events/create", { body });
+  } catch (e) {
+    // Legacy path still works on some calendars
+    if (e instanceof LumaApiError && (e.statusCode === 404 || e.statusCode === 405)) {
+      raw = await lumaRequest(settings, "POST", "/v1/event/create", { body });
+    } else {
+      throw e;
+    }
+  }
+
+  let flat = flattenLumaEventPayload(raw);
+  // Public short URL (e.g. https://luma.com/fwevqjak) often only on GET
+  if (!flat.url && (flat.id || flat.api_id)) {
+    try {
+      const fetched = await getEvent(settings, flat.id || flat.api_id);
+      flat = {
+        ...flat,
+        ...fetched,
+        url: fetched.url || flat.url,
+      };
+    } catch {
+      // keep create payload
+    }
+  }
+  return flat;
+}
+
+async function applyEventTag(settings, body = {}) {
+  const tag = String(body.tag || body.tag_id || body.name || "").trim();
+  const eventIds = Array.isArray(body.event_ids)
+    ? body.event_ids.map((v) => String(v)).filter(Boolean)
+    : [];
+  if (!tag) throw new LumaApiError("tag is required", 400);
+  if (!eventIds.length) throw new LumaApiError("event_ids required", 400);
+
+  const payload = { tag, event_ids: eventIds };
+  const paths = [
+    "/v1/calendars/event-tags/apply",
+    "/v1/calendar/event-tags/apply",
+  ];
+
+  let lastErr = null;
+  for (const path of paths) {
+    try {
+      return await lumaRequest(settings, "POST", path, { body: payload });
+    } catch (e) {
+      if (e instanceof LumaApiError) lastErr = e;
+      // Tag may not exist yet — create, then retry apply
+      const msg = String(e.message || "").toLowerCase();
+      if (
+        e instanceof LumaApiError &&
+        (e.statusCode === 400 || e.statusCode === 404 || msg.includes("tag"))
+      ) {
+        try {
+          await lumaRequest(settings, "POST", "/v1/calendars/event-tags/create", {
+            body: { name: tag },
+          });
+        } catch {
+          try {
+            await lumaRequest(settings, "POST", "/v1/calendar/event-tags/create", {
+              body: { name: tag },
+            });
+          } catch {
+            // ignore create failure (already exists / race)
+          }
+        }
+        try {
+          return await lumaRequest(settings, "POST", path, { body: payload });
+        } catch (e2) {
+          if (e2 instanceof LumaApiError) lastErr = e2;
+        }
+      }
+    }
+  }
+  throw lastErr || new LumaApiError("Failed to apply Luma event tag", 400);
+}
+
+async function createImageUploadUrl(settings, body = {}) {
+  return lumaRequest(settings, "POST", "/v1/images/create-upload-url", {
+    body: {
+      content_type: body.content_type || body.contentType || "image/jpeg",
+    },
+  });
+}
+
+function resolveEventId(source = {}) {
+  return String(
+    source.event_id || source.event_api_id || source.api_id || source.id || ""
+  ).trim();
+}
+
+function withEventIdFields(body = {}) {
+  const eventId = resolveEventId(body);
+  if (!eventId) return body;
+  return {
+    ...body,
+    event_id: eventId,
+    event_api_id: eventId,
+    api_id: body.api_id ?? eventId,
+  };
+}
+
+function ticketTypesQuery(query = {}) {
+  const eventId = resolveEventId(query);
+  if (!eventId) throw new LumaApiError("event_id required", 400);
+  return { ...query, event_id: eventId, event_api_id: eventId };
+}
+
+async function listTicketTypes(settings, query = {}) {
+  const q = ticketTypesQuery(query);
+  try {
+    return await lumaRequest(settings, "GET", "/v1/events/ticket-types/list", {
+      query: q,
+    });
+  } catch (e) {
+    if (!(e instanceof LumaApiError) || e.statusCode !== 404) throw e;
+    return lumaRequest(settings, "GET", "/v1/event/ticket-types/list", {
+      query: q,
+    });
+  }
+}
+
+async function createTicketType(settings, body = {}) {
+  const payload = withEventIdFields(body);
+  if (!resolveEventId(payload)) {
+    throw new LumaApiError("event_id required", 400);
+  }
+  try {
+    return await lumaRequest(settings, "POST", "/v1/events/ticket-types/create", {
+      body: payload,
+    });
+  } catch (e) {
+    if (!(e instanceof LumaApiError) || e.statusCode !== 404) throw e;
+    return lumaRequest(settings, "POST", "/v1/event/ticket-types/create", {
+      body: payload,
+    });
+  }
+}
+
+async function updateTicketType(settings, body = {}) {
+  const b = { ...(body || {}) };
+  const ticketTypeId = String(
+    b.event_ticket_type_id ||
+      b.event_ticket_type_api_id ||
+      b.ticket_type_api_id ||
+      b.ticket_type_id ||
+      b.api_id ||
+      b.id ||
+      ""
+  ).trim();
+  if (!ticketTypeId) {
+    throw new LumaApiError("event_ticket_type_id required", 400);
+  }
+  const currency = b.currency != null ? String(b.currency).toLowerCase() : undefined;
+  const updateBody = {
+    ...b,
+    event_ticket_type_id: ticketTypeId,
+    ...(currency ? { currency } : {}),
+  };
+  try {
+    return await lumaRequest(settings, "POST", "/v1/events/ticket-types/update", {
+      body: updateBody,
+    });
+  } catch (e) {
+    if (!(e instanceof LumaApiError) || e.statusCode !== 404) throw e;
+    return lumaRequest(settings, "POST", "/v1/event/ticket-types/update", {
+      body: updateBody,
+    });
+  }
+}
+
 module.exports = {
   LumaApiError,
   lumaRequest,
+  createEvent,
+  getEvent,
+  applyEventTag,
+  createImageUploadUrl,
+  listTicketTypes,
+  createTicketType,
+  updateTicketType,
   listHostedEvents,
   listEventGuests,
   fetchEventsForSync,

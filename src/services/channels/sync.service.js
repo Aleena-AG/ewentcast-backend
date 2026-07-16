@@ -1,3 +1,4 @@
+const { CHANNELS } = require("./helpers");
 const { getUserSettings } = require("../settings.service");
 const { upsertChannelEvents, listChannelEvents } = require("./events.service");
 const { upsertChannelBookings, listChannelBookings } = require("./bookings.service");
@@ -46,4 +47,27 @@ async function syncChannelDataToDb(channel, userId) {
   };
 }
 
-module.exports = { syncChannelDataToDb };
+/** Sync all three channels; per-channel failures are returned, not thrown. */
+async function syncAllChannelsToDb(userId) {
+  const results = {};
+  for (const channel of CHANNELS) {
+    try {
+      const result = await syncChannelDataToDb(channel, userId);
+      results[channel] = {
+        success: true,
+        events: result.events,
+        pruned: result.pruned,
+        bookings: result.bookings,
+      };
+    } catch (err) {
+      results[channel] = {
+        success: false,
+        message: err.message || "sync failed",
+        statusCode: err.statusCode || 500,
+      };
+    }
+  }
+  return results;
+}
+
+module.exports = { syncChannelDataToDb, syncAllChannelsToDb };
