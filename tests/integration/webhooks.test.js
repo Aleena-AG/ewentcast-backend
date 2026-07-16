@@ -83,6 +83,18 @@ describe("Webhooks API", () => {
     expect(res.status).toBe(200);
   });
 
+  test("POST eventbrite event.updated is skipped", async () => {
+    const res = await request(app)
+      .post("/api/v1/webhooks/eventbrite")
+      .send({
+        api_url: "https://www.eventbriteapi.com/v3/events/1994125238268/",
+        config: { action: "event.updated" },
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.skipped).toMatch(/event webhook/i);
+    expect(res.body.eventId).toBe("1994125238268");
+  });
+
   test("POST hightribe unknown event skipped", async () => {
     const res = await request(app)
       .post("/api/v1/webhooks/hightribe")
