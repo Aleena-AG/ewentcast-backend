@@ -7,6 +7,9 @@ const {
   createHightribeEventWithTickets,
   listHightribeBookings,
   listHightribeEvents,
+  getHightribeEvent,
+  updateHightribeEvent,
+  proxyHightribe,
 } = require("../controllers/hightribe.controller");
 
 const router = express.Router();
@@ -28,6 +31,9 @@ router.use(requireAuth);
 router.post("/login", loginHightribe);
 
 router.get("/events/bookings", listHightribeBookings);
+router.get("/events/:id", getHightribeEvent);
+router.put("/events/:id", optionalMultipart, updateHightribeEvent);
+router.patch("/events/:id", optionalMultipart, updateHightribeEvent);
 router.get("/events", listHightribeEvents);
 
 router.post(
@@ -36,5 +42,8 @@ router.post(
   createHightribeEventWithTickets
 );
 router.post("/events", optionalMultipart, createHightribeEvent);
+
+// tickets?ticketable_type=event&ticketable_id=… and any other HT API path
+router.all("/{*path}", optionalMultipart, proxyHightribe);
 
 module.exports = router;

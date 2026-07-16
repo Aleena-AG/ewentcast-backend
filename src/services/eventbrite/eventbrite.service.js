@@ -81,10 +81,148 @@ function sanitizeEventbriteEventBody(body) {
   return next;
 }
 
+function truthyFlag(v) {
+  if (v === true || v === 1) return true;
+  if (v === false || v === 0 || v == null) return false;
+  const s = String(v).trim().toLowerCase();
+  return s === "true" || s === "1" || s === "yes";
+}
+
+function costIsZero(cost) {
+  if (cost == null || cost === "") return true;
+  if (typeof cost === "number") return !Number.isFinite(cost) || cost <= 0;
+  if (typeof cost === "object") {
+    const value = Number(cost.value ?? cost.major_value ?? cost.amount);
+    return !Number.isFinite(value) || value <= 0;
+  }
+  const s = String(cost).trim();
+  // Formats: "USD,0" | "USD,000" | "0" | "USD,0.00"
+  const m = s.match(/^[A-Z]{3},(.+)$/i) || s.match(/^(.+)$/);
+  const amount = Number(String(m?.[1] ?? s).replace(/[^\d.-]/g, ""));
+  return !Number.isFinite(amount) || amount <= 0;
+}
+
+/**
+ * Normalize ticket_class cost to Eventbrite string form "USD,1000".
+ * Free / zero-cost tickets must omit `cost` entirely ("Free ticket classes should not have a cost.").
+ */
+function sanitizeTicketClassFields(tc) {
+  if (!tc || typeof tc !== "object") return tc;
+  const next = { ...tc };
+
+  const isFree =
+    truthyFlag(next.free) ||
+    truthyFlag(next.is_free) ||
+    costIsZero(next.cost);
+
+  if (isFree) {
+    next.free = true;
+    delete next.cost;
+    delete next.is_free;
+    // Fees only apply to paid tickets
+    delete next.include_fee;
+    delete next.fee;
+    return next;
+  }
+
+  next.free = false;
+  if (next.cost != null && typeof next.cost === "object") {
+    const currency = String(
+      next.cost.currency || next.cost.currency_code || "USD"
+    )
+      .trim()
+      .toUpperCase() || "USD";
+    const value = Number(next.cost.value ?? next.cost.major_value ?? 0);
+    if (Number.isFinite(value) && value > 0) {
+      next.cost = `${currency},${Math.round(value)}`;
+    } else {
+      next.free = true;
+      delete next.cost;
+    }
+  }
+
+  return next;
+}
+
+function sanitizeEventbriteTicketClassBody(body) {
+  if (!body || typeof body !== "object") return body;
+  const next = { ...body };
+  if (next.ticket_class && typeof next.ticket_class === "object") {
+    next.ticket_class = sanitizeTicketClassFields(next.ticket_class);
+  } else if (
+    next.name != null ||
+    next.cost != null ||
+    next.free != null ||
+    next.quantity_total != null
+  ) {
+    // Bare ticket_class fields at top level
+    return sanitizeTicketClassFields(next);
+  }
+  return next;
+}
+
 async function createOrganizationEvent(settings, orgId, body) {
   return ebRequest(settings, `organizations/${orgId}/events`, {}, {
     method: "POST",
     body: sanitizeEventbriteEventBody(body),
+  });
+}
+
+/**
+ * Update an Eventbrite event (POST /v3/events/:id/).
+ * `fields`: { title, description, startAt, endAt, timezone, onlineEvent, listed }
+ */
+async function updateEvent(settings, eventId, fields = {}) {
+  const id = String(eventId || "").trim();
+  if (!id) throw new EventbriteApiError("event id required", 400);
+
+  const event = {};
+  const title = fields.title || fields.name;
+  if (title) {
+    event.name = { html: String(title) };
+  }
+
+  const description = fields.description || fields.description_html;
+  if (description != null && String(description).trim() !== "") {
+    // Prefer summary for short text; Eventbrite rejects both summary+description
+    const text = String(description);
+    if (text.length <= 140) {
+      event.summary = text;
+    } else {
+      event.description = { html: text };
+    }
+  }
+
+  const timezone = fields.timezone || fields.tz || "UTC";
+  const startAt = fields.startAt || fields.start_at;
+  const endAt = fields.endAt || fields.end_at;
+  if (startAt) {
+    event.start = {
+      timezone,
+      utc: String(startAt).replace(/\.\d{3}Z$/, "Z"),
+    };
+  }
+  if (endAt) {
+    event.end = {
+      timezone,
+      utc: String(endAt).replace(/\.\d{3}Z$/, "Z"),
+    };
+  }
+
+  if (fields.onlineEvent != null || fields.online_event != null) {
+    event.online_event = !!(fields.onlineEvent ?? fields.online_event);
+  }
+  if (fields.listed != null) {
+    event.listed = !!fields.listed;
+  }
+
+  if (!Object.keys(event).length) {
+    throw new EventbriteApiError("No Eventbrite fields to update", 400);
+  }
+
+  return ebRequest(settings, `events/${id}`, {}, {
+    method: "POST",
+    body: sanitizeEventbriteEventBody({ event }),
   });
 }
 
@@ -113,14 +251,12 @@ async function proxyToEventbrite(settings, method, path, query = {}, body) {
 
   const upper = String(method || "GET").toUpperCase();
   let outboundBody = body;
-  if (
-    outboundBody &&
-    upper !== "GET" &&
-    upper !== "HEAD" &&
-    /(^|\/)events(\/|$)/.test(clean) &&
-    outboundBody.event
-  ) {
-    outboundBody = sanitizeEventbriteEventBody(outboundBody);
+  if (outboundBody && upper !== "GET" && upper !== "HEAD") {
+    if (/(^|\/)ticket_classes(\/|$)/i.test(clean)) {
+      outboundBody = sanitizeEventbriteTicketClassBody(outboundBody);
+    } else if (/(^|\/)events(\/|$)/.test(clean) && outboundBody.event) {
+      outboundBody = sanitizeEventbriteEventBody(outboundBody);
+    }
   }
 
   return ebRequest(settings, clean, sanitizeEbQuery(clean, query), {
@@ -211,8 +347,10 @@ module.exports = {
   ebRequest,
   listOrganizations,
   createOrganizationEvent,
+  updateEvent,
   proxyToEventbrite,
   sanitizeEventbriteEventBody,
+  sanitizeEventbriteTicketClassBody,
   fetchEventsForSync,
   fetchBookingsForSync,
 };
