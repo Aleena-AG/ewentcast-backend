@@ -15,32 +15,16 @@ const COLLECTION_API_UID = "17385817-e0f287ad-1766-4deb-b622-ddfbf6597e8a";
 const OUT = path.join(__dirname, "..", "postman", "Ewentcast-API.postman_collection.json");
 
 const saveAuthScript = [
-  "let j = {};",
-  "try { j = pm.response.json() || {}; } catch (e) { j = {}; }",
+  "const j = pm.response.json();",
   "if (pm.response.code === 200 || pm.response.code === 201) {",
-  "  const token = j.token || j.data?.token || j.access_token;",
-  "  if (token) {",
-  '    pm.collectionVariables.set("authToken", String(token));',
-  '    console.log("authToken updated (" + String(token).slice(0, 8) + "…)");',
-  "  } else {",
-  '    console.warn("Login/Register OK but no token in body", Object.keys(j));',
+  "  if (j.token) {",
+  '    pm.collectionVariables.set("authToken", j.token);',
+  '    console.log("authToken updated");',
   "  }",
-  "  const user = j.user || j.data?.user;",
-  '  if (user && user.id) pm.collectionVariables.set("userId", String(user.id));',
+  '  if (j.user && j.user.id) pm.collectionVariables.set("userId", String(j.user.id));',
   '  if (j.verifyToken) pm.collectionVariables.set("verifyToken", j.verifyToken);',
   '  if (j.resetToken) pm.collectionVariables.set("resetToken", j.resetToken);',
   "}",
-];
-
-const registerPrerequest = [
-  "// Unique email so re-runs do not always 422 on duplicate",
-  "const base = pm.collectionVariables.get('authEmail') || 'demo@ewentcast.test';",
-  "const at = base.indexOf('@');",
-  "const local = at > 0 ? base.slice(0, at) : 'demo';",
-  "const domain = at > 0 ? base.slice(at + 1) : 'ewentcast.test';",
-  "const unique = local.split('+')[0] + '+' + Date.now() + '@' + domain;",
-  'pm.collectionVariables.set("authEmail", unique);',
-  'console.log("Register email:", unique);',
 ];
 
 /** Default assertions on every request (fixes Collection Runner "No tests found"). */
@@ -150,13 +134,10 @@ function req(name, method, rawPath, opts = {}) {
 
   // Always attach Tests so Collection Runner never shows "No tests found"
   let extraLines = [...extraTests];
-  const otherEvents = [];
   if (events) {
     for (const ev of events) {
       if (ev.listen === "test" && ev.script?.exec) {
         extraLines = extraLines.concat(ev.script.exec);
-      } else if (ev.listen === "prerequest") {
-        otherEvents.push(ev);
       }
     }
   }
@@ -164,10 +145,7 @@ function req(name, method, rawPath, opts = {}) {
   const item = {
     name,
     request,
-    event: [
-      ...otherEvents,
-      ...mergeTestEvents(extraLines, expectOk === false ? null : expectOk || [200, 201]),
-    ],
+    event: mergeTestEvents(extraLines, expectOk === false ? null : expectOk || [200, 201]),
   };
   return item;
 }
@@ -176,15 +154,6 @@ function testScript(lines) {
   return [
     {
       listen: "test",
-      script: { type: "text/javascript", exec: lines },
-    },
-  ];
-}
-
-function prerequestScript(lines) {
-  return [
-    {
-      listen: "prerequest",
       script: { type: "text/javascript", exec: lines },
     },
   ];
@@ -286,20 +255,17 @@ const collection = {
 
     folder(
       "Auth",
-      "Register → Login → Me (Bearer). Public auth routes use noauth. Logout is in Cleanup (end) so runner keeps the token.",
+      "Register / login / me / password / verify. Login + Register save {{authToken}}.",
       [
         req("Register", "POST", "/api/v1/auth/register", {
           auth: "noauth",
-          expectOk: [200, 201, 422],
+          expectOk: [200, 201],
           body: {
             name: "Demo User",
             email: "{{authEmail}}",
             password: "{{authPassword}}",
           },
-          events: [
-            ...prerequestScript(registerPrerequest),
-            ...testScript(saveAuthScript),
-          ],
+          events: testScript(saveAuthScript),
         }),
         req("Login", "POST", "/api/v1/auth/login", {
           auth: "noauth",
@@ -307,13 +273,10 @@ const collection = {
           body: { email: "{{authEmail}}", password: "{{authPassword}}" },
           events: testScript(saveAuthScript),
         }),
-        req("Me", "GET", "/api/v1/auth/me", {
-          auth: "bearer",
-          expectOk: [200],
-        }),
+        req("Me", "GET", "/api/v1/auth/me", { expectOk: [200] }),
+        req("Logout", "POST", "/api/v1/auth/logout", { expectOk: [200] }),
         req("Forgot Password", "POST", "/api/v1/auth/forgot-password", {
           auth: "noauth",
-          expectOk: [200],
           body: { email: "{{authEmail}}" },
           events: testScript([
             "if (pm.response.code === 200) {",
@@ -324,12 +287,10 @@ const collection = {
         }),
         req("Reset Password", "POST", "/api/v1/auth/reset-password", {
           auth: "noauth",
-          expectOk: false,
           body: { token: "{{resetToken}}", password: "{{authPassword}}" },
         }),
         req("Resend Verification Email", "POST", "/api/v1/auth/resend-verification", {
           auth: "noauth",
-          expectOk: [200],
           body: { email: "{{authEmail}}" },
           events: testScript([
             "if (pm.response.code === 200) {",
@@ -340,15 +301,14 @@ const collection = {
         }),
         req("Verify Email (POST)", "POST", "/api/v1/auth/verify-email", {
           auth: "noauth",
-          expectOk: false,
           body: { token: "{{verifyToken}}" },
         }),
         req("Verify Email (GET link)", "GET", "/api/v1/auth/verify-email", {
           auth: "noauth",
-          expectOk: false,
           query: [{ key: "token", value: "{{verifyToken}}" }],
         }),
-      ]
+      ],
+      "noauth"
     ),
 
     folder("Users", "Authenticated user profile", [
@@ -845,17 +805,6 @@ const collection = {
         auth: "noauth",
       }),
     ]),
-
-    folder(
-      "Cleanup",
-      "Run last. Logout invalidates {{authToken}} — skip during mid-run.",
-      [
-        req("Logout", "POST", "/api/v1/auth/logout", {
-          auth: "bearer",
-          expectOk: [200],
-        }),
-      ]
-    ),
   ],
 };
 
