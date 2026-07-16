@@ -8,6 +8,7 @@ const {
   removeMasterEvent,
   linkChannelRef,
   unlinkChannelRef,
+  propagateMasterChannels,
   listAttendees,
   createAttendee,
   createAttendeeByChannel,
@@ -33,5 +34,6 @@ router.post("/:id/attendees", createAttendee);
 
 router.post("/:id/channels", linkChannelRef);
 router.delete("/:id/channels/:channel", unlinkChannelRef);
+router.post("/:id/propagate", propagateMasterChannels);
 
 module.exports = router;

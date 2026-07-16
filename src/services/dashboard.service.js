@@ -78,9 +78,12 @@ async function getDashboardStats(userId) {
     if (byCh[b.channel]) byCh[b.channel].push(b);
   }
 
+  // Prefer channel_bookings as source of truth. master.sold can drift higher
+  // (webhooks / capacity sync) and made "Registrations" disagree with the list.
   const registrySold = masters.reduce((s, m) => s + (Number(m.sold) || 0), 0);
   const ticketsFromBookings = bookings.reduce((s, b) => s + ticketCount(b), 0);
-  const totalTickets = registrySold > 0 ? registrySold : ticketsFromBookings;
+  const totalTickets =
+    bookings.length > 0 ? ticketsFromBookings : registrySold;
 
   let totalRevenue = 0;
   const revenueByChannel = emptyDayCounts();

@@ -178,6 +178,27 @@ async function createEventWithTickets(userId, body, files = []) {
   });
 }
 
+async function updateEvent(userId, eventId, body, files = []) {
+  const id = String(eventId || "").trim();
+  if (!id) throw new HightribeApiError("event id required", 400);
+
+  const hasMultipart =
+    files.length > 0 ||
+    Object.keys(body || {}).some((k) => k.includes("["));
+
+  if (hasMultipart || files.length > 0) {
+    return htRequest(userId, `events/${id}`, {}, {
+      method: "POST",
+      formData: buildHtOutboundForm(body, files),
+    });
+  }
+
+  return htRequest(userId, `events/${id}`, {}, {
+    method: "PUT",
+    body: normalizeHtTicketFlags(body),
+  });
+}
+
 async function fetchEventsPage(userId, page = 1, perPage = 50) {
   const data = await htRequest(userId, "events", {
     page: String(page),
@@ -335,6 +356,7 @@ module.exports = {
   loginWithPassword,
   createEvent,
   createEventWithTickets,
+  updateEvent,
   fetchEventsPage,
   fetchBookingsPage,
   fetchEventsForSync,

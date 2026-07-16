@@ -290,6 +290,66 @@ async function createEvent(settings, body) {
   return flat;
 }
 
+/**
+ * Update an existing Luma event (POST /v1/events/update).
+ * `fields` may include name, start_at, end_at, timezone, description_md,
+ * max_capacity, geo_address_json, cover_url, meeting_url, etc.
+ */
+async function updateEvent(settings, eventId, fields = {}) {
+  const id = String(eventId || fields.event_id || fields.api_id || "").trim();
+  if (!id) throw new LumaApiError("event_id required", 400);
+
+  const body = {
+    event_id: id,
+    suppress_notifications:
+      fields.suppress_notifications !== undefined
+        ? !!fields.suppress_notifications
+        : true,
+  };
+
+  const copyKeys = [
+    "name",
+    "start_at",
+    "end_at",
+    "timezone",
+    "description_md",
+    "max_capacity",
+    "geo_address_json",
+    "meeting_url",
+    "visibility",
+    "cover_url",
+    "coordinate",
+  ];
+  for (const key of copyKeys) {
+    if (fields[key] !== undefined && fields[key] !== null && fields[key] !== "") {
+      body[key] = fields[key];
+    }
+  }
+
+  // Luma cover_url must be on their CDN — drop invalid values
+  if (
+    body.cover_url &&
+    !String(body.cover_url).startsWith("https://images.lumacdn.com/")
+  ) {
+    delete body.cover_url;
+  }
+
+  try {
+    const raw = await lumaRequest(settings, "POST", "/v1/events/update", { body });
+    return flattenLumaEventPayload(raw);
+  } catch (e) {
+    if (e instanceof LumaApiError && (e.statusCode === 404 || e.statusCode === 405)) {
+      const legacy = { ...body, api_id: id, id };
+      delete legacy.event_id;
+      const raw = await lumaRequest(settings, "POST", "/v1/event/update", {
+        body: legacy,
+      });
+      return flattenLumaEventPayload(raw);
+    }
+    throw e;
+  }
+}
+
 async function applyEventTag(settings, body = {}) {
   const tag = String(body.tag || body.tag_id || body.name || "").trim();
   const eventIds = Array.isArray(body.event_ids)
@@ -438,6 +498,7 @@ module.exports = {
   LumaApiError,
   lumaRequest,
   createEvent,
+  updateEvent,
   getEvent,
   applyEventTag,
   createImageUploadUrl,

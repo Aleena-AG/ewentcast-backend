@@ -89,6 +89,64 @@ async function createOrganizationEvent(settings, orgId, body) {
 }
 
 /**
+ * Update an Eventbrite event (POST /v3/events/:id/).
+ * `fields`: { title, description, startAt, endAt, timezone, onlineEvent, listed }
+ */
+async function updateEvent(settings, eventId, fields = {}) {
+  const id = String(eventId || "").trim();
+  if (!id) throw new EventbriteApiError("event id required", 400);
+
+  const event = {};
+  const title = fields.title || fields.name;
+  if (title) {
+    event.name = { html: String(title) };
+  }
+
+  const description = fields.description || fields.description_html;
+  if (description != null && String(description).trim() !== "") {
+    // Prefer summary for short text; Eventbrite rejects both summary+description
+    const text = String(description);
+    if (text.length <= 140) {
+      event.summary = text;
+    } else {
+      event.description = { html: text };
+    }
+  }
+
+  const timezone = fields.timezone || fields.tz || "UTC";
+  const startAt = fields.startAt || fields.start_at;
+  const endAt = fields.endAt || fields.end_at;
+  if (startAt) {
+    event.start = {
+      timezone,
+      utc: String(startAt).replace(/\.\d{3}Z$/, "Z"),
+    };
+  }
+  if (endAt) {
+    event.end = {
+      timezone,
+      utc: String(endAt).replace(/\.\d{3}Z$/, "Z"),
+    };
+  }
+
+  if (fields.onlineEvent != null || fields.online_event != null) {
+    event.online_event = !!(fields.onlineEvent ?? fields.online_event);
+  }
+  if (fields.listed != null) {
+    event.listed = !!fields.listed;
+  }
+
+  if (!Object.keys(event).length) {
+    throw new EventbriteApiError("No Eventbrite fields to update", 400);
+  }
+
+  return ebRequest(settings, `events/${id}`, {}, {
+    method: "POST",
+    body: sanitizeEventbriteEventBody({ event }),
+  });
+}
+
+/**
  * Forward any remaining /eventbrite/* path to Eventbrite v3.
  * Path is relative (e.g. events/123/structured_content/).
  */
@@ -211,6 +269,7 @@ module.exports = {
   ebRequest,
   listOrganizations,
   createOrganizationEvent,
+  updateEvent,
   proxyToEventbrite,
   sanitizeEventbriteEventBody,
   fetchEventsForSync,

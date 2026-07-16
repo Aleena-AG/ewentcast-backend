@@ -10,6 +10,10 @@ const {
   registerAttendeeByChannel,
 } = require("../services/registry.service");
 const { mirrorMasterToChannelEvents } = require("../services/channels/mirror-master.service");
+const {
+  propagateMasterToChannels,
+  propagateOwnedMaster,
+} = require("../services/channels/propagate-master.service");
 
 const MASTER_INCLUDE = { channelRefs: true, attendees: true };
 
@@ -265,7 +269,18 @@ async function updateMasterEvent(req, res, next) {
 
     await mirrorMasterToChannelEvents(req.userId, event);
 
-    res.json({ success: true, data: toPublicMaster(event) });
+    // Push updates to Hightribe + Luma + Eventbrite (linked channels)
+    const syncChannels = body.syncChannels !== false && body.propagate !== false;
+    let channelUpdates = null;
+    if (syncChannels) {
+      channelUpdates = await propagateMasterToChannels(req.userId, event);
+    }
+
+    res.json({
+      success: true,
+      data: toPublicMaster(event),
+      channelUpdates,
+    });
   } catch (err) {
     next(err);
   }
@@ -316,6 +331,23 @@ async function unlinkChannelRef(req, res, next) {
       return res.status(404).json({ success: false, message: "Master event not found" });
     }
     res.json({ success: true, data: serialize(master) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Explicit: push current master fields to all linked channel APIs */
+async function propagateMasterChannels(req, res, next) {
+  try {
+    const result = await propagateOwnedMaster(req.params.id, req.userId);
+    if (!result) {
+      return res.status(404).json({ success: false, message: "Master event not found" });
+    }
+    res.json({
+      success: true,
+      data: toPublicMaster(result.master),
+      channelUpdates: result.channels,
+    });
   } catch (err) {
     next(err);
   }
@@ -414,6 +446,7 @@ module.exports = {
   removeMasterEvent,
   linkChannelRef,
   unlinkChannelRef,
+  propagateMasterChannels,
   listAttendees,
   createAttendee,
   createAttendeeByChannel,
