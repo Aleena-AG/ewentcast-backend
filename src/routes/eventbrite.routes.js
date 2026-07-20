@@ -5,6 +5,8 @@ const {
   listOrganizations,
   createOrganizationEvent,
   updateOrganizationEvent,
+  getOrganizationEvent,
+  uploadMedia,
   proxyEventbrite,
 } = require("../controllers/eventbrite.controller");
 
@@ -24,13 +26,15 @@ function optionalMultipart(req, res, next) {
 
 router.use(requireAuth);
 
-// Specific helpers (create/update with optional ticket_classes)
+// Specific helpers (create/update with optional ticket_classes + logo)
 router.get("/organizations", listOrganizations);
+router.post("/media/upload", optionalMultipart, uploadMedia);
 router.post(
   "/organizations/:orgId/events",
   optionalMultipart,
   createOrganizationEvent
 );
+router.get("/events/:eventId", getOrganizationEvent);
 router.post("/events/:eventId", optionalMultipart, updateOrganizationEvent);
 router.put("/events/:eventId", optionalMultipart, updateOrganizationEvent);
 router.patch("/events/:eventId", optionalMultipart, updateOrganizationEvent);

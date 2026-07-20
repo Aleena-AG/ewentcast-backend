@@ -113,6 +113,7 @@ function mergeTestEvents(extraLines = [], expectOk = null) {
 function req(name, method, rawPath, opts = {}) {
   const {
     body,
+    formdata = null,
     description = "",
     auth = "inherit",
     headers = [],
@@ -140,7 +141,12 @@ function req(name, method, rawPath, opts = {}) {
     };
   }
 
-  if (body != null) {
+  if (formdata != null) {
+    request.body = {
+      mode: "formdata",
+      formdata: Array.isArray(formdata) ? formdata : formdata,
+    };
+  } else if (body != null) {
     request.header.push({ key: "Content-Type", value: "application/json" });
     request.body = {
       mode: "raw",
@@ -272,6 +278,7 @@ const collection = {
     { key: "lumaEventId", value: "evt-sample-001" },
     { key: "ticketTypeId", value: "" },
     { key: "ticketClassId", value: "" },
+    { key: "logoId", value: "" },
     { key: "sessionId", value: "" },
     { key: "webhookLogToken", value: "change-me" },
     { key: "resetToken", value: "" },
@@ -728,7 +735,7 @@ const collection = {
         }),
         req("Create organization event with tickets", "POST", "/api/v1/eventbrite/organizations/{{orgId}}/events", {
           description:
-            "Creates the Eventbrite event, then each ticket_class (EB requires separate calls). Response includes ticket_classes.",
+            "Creates the Eventbrite event, then each ticket_class. Optional multipart: add logo/image file field to upload cover (returned as logo).",
           body: {
             event: {
               name: { html: "Postman EB Event" },
@@ -765,13 +772,64 @@ const collection = {
             "}",
           ]),
         }),
+        req("Upload event logo", "POST", "/api/v1/eventbrite/media/upload", {
+          description:
+            "Eventbrite 3-step media upload. Returns media object (id, url). Use id as event.logo_id or attach file on create/update.",
+          formdata: [
+            { key: "logo", type: "file", src: [], description: "Event cover image (2:1 recommended)" },
+          ],
+          events: testScript([
+            "if (pm.response.code === 200 || pm.response.code === 201) {",
+            "  const j = pm.response.json();",
+            "  const id = j.id || j.data?.id;",
+            "  if (id) pm.collectionVariables.set('logoId', String(id));",
+            "}",
+          ]),
+        }),
+        req("Create event with logo (multipart)", "POST", "/api/v1/eventbrite/organizations/{{orgId}}/events", {
+          description:
+            "Multipart create: event + ticket_classes as JSON strings + logo file. Response includes logo media object.",
+          formdata: [
+            {
+              key: "event",
+              type: "text",
+              value: JSON.stringify({
+                name: { html: "Postman EB Event With Logo" },
+                start: { timezone: "America/Los_Angeles", utc: "2026-11-01T18:00:00Z" },
+                end: { timezone: "America/Los_Angeles", utc: "2026-11-01T21:00:00Z" },
+                currency: "USD",
+              }),
+            },
+            {
+              key: "ticket_classes",
+              type: "text",
+              value: JSON.stringify([
+                { name: "General Admission", quantity_total: 100, free: true },
+              ]),
+            },
+            { key: "logo", type: "file", src: [] },
+          ],
+          events: testScript([
+            "if (pm.response.code === 200 || pm.response.code === 201) {",
+            "  const j = pm.response.json();",
+            "  const id = j.id || j.data?.id;",
+            "  if (id) pm.collectionVariables.set('externalId', String(id));",
+            "}",
+          ]),
+        }),
+        req("Get event (with logo)", "GET", "/api/v1/eventbrite/events/{{externalId}}", {
+          description:
+            "Returns event with expand=logo,ticket_classes. Includes logo, image, and image_url helpers.",
+          query: [{ key: "expand", value: "logo,ticket_classes" }],
+        }),
         req("Update event with tickets", "POST", "/api/v1/eventbrite/events/{{externalId}}", {
           description:
-            "Updates event fields and ticket classes. Ticket with id → update; without id → create.",
+            "Updates event fields and ticket classes. Ticket with id → update; without id → create. Optional multipart logo file.",
           body: {
             event: {
               name: { html: "Postman EB Event (updated)" },
               summary: "Updated via Postman",
+              logo_id: "{{logoId}}",
             },
             ticket_classes: [
               {
@@ -788,8 +846,22 @@ const collection = {
             ],
           },
         }),
+        req("Update event logo (multipart)", "POST", "/api/v1/eventbrite/events/{{externalId}}", {
+          description: "Multipart update: optional event JSON + new logo file. Response includes logo.",
+          formdata: [
+            {
+              key: "event",
+              type: "text",
+              value: JSON.stringify({
+                name: { html: "Postman EB Event (logo updated)" },
+              }),
+            },
+            { key: "logo", type: "file", src: [] },
+          ],
+        }),
         req("Proxy: get event", "GET", "/api/v1/eventbrite/events/{{externalId}}/", {
-          description: "Catch-all proxy → Eventbrite GET /v3/events/:id/",
+          description: "Catch-all proxy → Eventbrite GET /v3/events/:id/ (add ?expand=logo for image)",
+          query: [{ key: "expand", value: "logo,ticket_classes" }],
         }),
         req("Proxy: publish event", "POST", "/api/v1/eventbrite/events/{{externalId}}/publish/", {
           description: "Catch-all proxy → Eventbrite publish",

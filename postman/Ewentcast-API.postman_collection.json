@@ -71,6 +71,10 @@
       "value": ""
     },
     {
+      "key": "logoId",
+      "value": ""
+    },
+    {
       "key": "sessionId",
       "value": ""
     },
@@ -5123,7 +5127,7 @@
                 "events"
               ]
             },
-            "description": "Creates the Eventbrite event, then each ticket_class (EB requires separate calls). Response includes ticket_classes.",
+            "description": "Creates the Eventbrite event, then each ticket_class. Optional multipart: add logo/image file field to upload cover (returned as logo).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"event\": {\n    \"name\": {\n      \"html\": \"Postman EB Event\"\n    },\n    \"start\": {\n      \"timezone\": \"America/Los_Angeles\",\n      \"utc\": \"2026-11-01T18:00:00Z\"\n    },\n    \"end\": {\n      \"timezone\": \"America/Los_Angeles\",\n      \"utc\": \"2026-11-01T21:00:00Z\"\n    },\n    \"currency\": \"USD\"\n  },\n  \"ticket_classes\": [\n    {\n      \"name\": \"General Admission\",\n      \"quantity_total\": 100,\n      \"free\": true\n    },\n    {\n      \"name\": \"VIP\",\n      \"quantity_total\": 20,\n      \"cost\": \"USD,5000\"\n    }\n  ]\n}"
@@ -5176,6 +5180,244 @@
           ]
         },
         {
+          "name": "Upload event logo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/eventbrite/media/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventbrite",
+                "media",
+                "upload"
+              ]
+            },
+            "description": "Eventbrite 3-step media upload. Returns media object (id, url). Use id as event.logo_id or attach file on create/update.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": [],
+                  "description": "Event cover image (2:1 recommended)"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});",
+                  "",
+                  "// Request-specific hooks",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  const j = pm.response.json();",
+                  "  const id = j.id || j.data?.id;",
+                  "  if (id) pm.collectionVariables.set('logoId', String(id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create event with logo (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/eventbrite/organizations/{{orgId}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventbrite",
+                "organizations",
+                "{{orgId}}",
+                "events"
+              ]
+            },
+            "description": "Multipart create: event + ticket_classes as JSON strings + logo file. Response includes logo media object.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "event",
+                  "type": "text",
+                  "value": "{\"name\":{\"html\":\"Postman EB Event With Logo\"},\"start\":{\"timezone\":\"America/Los_Angeles\",\"utc\":\"2026-11-01T18:00:00Z\"},\"end\":{\"timezone\":\"America/Los_Angeles\",\"utc\":\"2026-11-01T21:00:00Z\"},\"currency\":\"USD\"}"
+                },
+                {
+                  "key": "ticket_classes",
+                  "type": "text",
+                  "value": "[{\"name\":\"General Admission\",\"quantity_total\":100,\"free\":true}]"
+                },
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});",
+                  "",
+                  "// Request-specific hooks",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  const j = pm.response.json();",
+                  "  const id = j.id || j.data?.id;",
+                  "  if (id) pm.collectionVariables.set('externalId', String(id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get event (with logo)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/eventbrite/events/{{externalId}}?expand=logo,ticket_classes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventbrite",
+                "events",
+                "{{externalId}}"
+              ],
+              "query": [
+                {
+                  "key": "expand",
+                  "value": "logo,ticket_classes"
+                }
+              ]
+            },
+            "description": "Returns event with expand=logo,ticket_classes. Includes logo, image, and image_url helpers."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Update event with tickets",
           "request": {
             "method": "POST",
@@ -5202,10 +5444,87 @@
                 "{{externalId}}"
               ]
             },
-            "description": "Updates event fields and ticket classes. Ticket with id → update; without id → create.",
+            "description": "Updates event fields and ticket classes. Ticket with id → update; without id → create. Optional multipart logo file.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"event\": {\n    \"name\": {\n      \"html\": \"Postman EB Event (updated)\"\n    },\n    \"summary\": \"Updated via Postman\"\n  },\n  \"ticket_classes\": [\n    {\n      \"id\": \"{{ticketClassId}}\",\n      \"name\": \"General Admission\",\n      \"quantity_total\": 120,\n      \"free\": true\n    },\n    {\n      \"name\": \"Early Bird\",\n      \"quantity_total\": 30,\n      \"cost\": \"USD,2500\"\n    }\n  ]\n}"
+              "raw": "{\n  \"event\": {\n    \"name\": {\n      \"html\": \"Postman EB Event (updated)\"\n    },\n    \"summary\": \"Updated via Postman\",\n    \"logo_id\": \"{{logoId}}\"\n  },\n  \"ticket_classes\": [\n    {\n      \"id\": \"{{ticketClassId}}\",\n      \"name\": \"General Admission\",\n      \"quantity_total\": 120,\n      \"free\": true\n    },\n    {\n      \"name\": \"Early Bird\",\n      \"quantity_total\": 30,\n      \"cost\": \"USD,2500\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update event logo (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/eventbrite/events/{{externalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventbrite",
+                "events",
+                "{{externalId}}"
+              ]
+            },
+            "description": "Multipart update: optional event JSON + new logo file. Response includes logo.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "event",
+                  "type": "text",
+                  "value": "{\"name\":{\"html\":\"Postman EB Event (logo updated)\"}}"
+                },
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": []
+                }
+              ]
             }
           },
           "event": [
@@ -5256,7 +5575,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/eventbrite/events/{{externalId}}/",
+              "raw": "{{baseUrl}}/api/v1/eventbrite/events/{{externalId}}/?expand=logo,ticket_classes",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -5267,9 +5586,15 @@
                 "events",
                 "{{externalId}}",
                 ""
+              ],
+              "query": [
+                {
+                  "key": "expand",
+                  "value": "logo,ticket_classes"
+                }
               ]
             },
-            "description": "Catch-all proxy → Eventbrite GET /v3/events/:id/"
+            "description": "Catch-all proxy → Eventbrite GET /v3/events/:id/ (add ?expand=logo for image)"
           },
           "event": [
             {

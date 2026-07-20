@@ -171,7 +171,105 @@ function eventBodyWithoutTickets(body = {}) {
   const next = { ...(body || {}) };
   delete next.ticket_classes;
   delete next.tickets;
+  delete next.crop_mask;
   return next;
+}
+
+function defaultCropMask() {
+  return {
+    top_left: { x: 1, y: 1 },
+    width: 1280,
+    height: 640,
+  };
+}
+
+function pickLogoFile(files = []) {
+  if (!Array.isArray(files) || !files.length) return null;
+  const preferred = files.find((f) =>
+    /^(logo|image|cover|cover_image|file)$/i.test(String(f.fieldname || ""))
+  );
+  return preferred || files[0] || null;
+}
+
+/**
+ * Eventbrite logo upload (3 steps):
+ * 1) GET media/upload/?type=image-event-logo
+ * 2) POST file to S3 upload_url
+ * 3) POST media/upload with upload_token + crop_mask (2:1)
+ * Returns the media object (id, url, …).
+ */
+async function uploadEventLogo(settings, file, cropMask) {
+  if (!file?.buffer) {
+    throw new EventbriteApiError("image file is required", 400);
+  }
+
+  const instructions = await ebRequest(settings, "media/upload", {
+    type: "image-event-logo",
+  });
+
+  const uploadUrl = String(instructions.upload_url || "").trim();
+  const uploadToken = String(instructions.upload_token || "").trim();
+  const fileParam = String(instructions.file_parameter_name || "file");
+  const uploadData =
+    instructions.upload_data && typeof instructions.upload_data === "object"
+      ? instructions.upload_data
+      : {};
+
+  if (!uploadUrl || !uploadToken) {
+    throw new EventbriteApiError("Eventbrite media upload instructions incomplete", 502);
+  }
+
+  const form = new FormData();
+  for (const [key, value] of Object.entries(uploadData)) {
+    if (value != null) form.append(key, String(value));
+  }
+  const blob = new Blob([file.buffer], {
+    type: file.mimetype || "application/octet-stream",
+  });
+  form.append(fileParam, blob, file.originalname || "event-logo.jpg");
+
+  const uploadRes = await fetch(uploadUrl, { method: "POST", body: form });
+  if (!uploadRes.ok) {
+    const text = await uploadRes.text().catch(() => "");
+    throw new EventbriteApiError(
+      `Eventbrite image upload failed: ${text || uploadRes.status}`,
+      uploadRes.status >= 400 && uploadRes.status < 600 ? uploadRes.status : 502
+    );
+  }
+
+  const mask =
+    cropMask && typeof cropMask === "object" ? cropMask : defaultCropMask();
+
+  const media = await ebRequest(settings, "media/upload", {}, {
+    method: "POST",
+    body: {
+      upload_token: uploadToken,
+      crop_mask: mask,
+    },
+  });
+
+  return media;
+}
+
+async function resolveLogoForBody(settings, body = {}, file = null) {
+  let logo = null;
+  const clean = { ...(body || {}) };
+  const cropMask = clean.crop_mask;
+  delete clean.crop_mask;
+
+  if (file) {
+    logo = await uploadEventLogo(settings, file, cropMask);
+    const logoId = logo?.id != null ? String(logo.id) : "";
+    if (logoId) {
+      if (clean.event && typeof clean.event === "object") {
+        clean.event = { ...clean.event, logo_id: logoId };
+      } else {
+        clean.logo_id = logoId;
+      }
+    }
+  }
+
+  return { body: clean, logo };
 }
 
 function wrapTicketClassBody(ticket) {
@@ -212,11 +310,13 @@ async function updateTicketClass(settings, eventId, ticketClassId, body) {
 
 /**
  * Create event, then each ticket class (Eventbrite requires separate calls).
+ * Optional multipart logo/image file → upload + set event.logo_id.
  * Body may include `ticket_classes` / `tickets` alongside `event`.
  */
-async function createOrganizationEventWithTickets(settings, orgId, body = {}) {
-  const tickets = extractTicketClasses(body);
-  const event = await createOrganizationEvent(settings, orgId, body);
+async function createOrganizationEventWithTickets(settings, orgId, body = {}, file = null) {
+  const { body: withLogo, logo } = await resolveLogoForBody(settings, body, file);
+  const tickets = extractTicketClasses(withLogo);
+  const event = await createOrganizationEvent(settings, orgId, withLogo);
   const eventId = String(event?.id || "").trim();
 
   const ticket_classes = [];
@@ -239,6 +339,7 @@ async function createOrganizationEventWithTickets(settings, orgId, body = {}) {
   }
 
   const result = { ...event, ticket_classes };
+  if (logo) result.logo = logo;
   if (ticket_errors.length) result.ticket_errors = ticket_errors;
   return result;
 }
@@ -319,14 +420,16 @@ async function updateEvent(settings, eventId, fields = {}) {
 
 /**
  * Update event fields and/or ticket classes in one request.
+ * Optional logo/image file → upload + set logo_id.
  * Ticket with `id` → update; without → create.
  */
-async function updateEventWithTickets(settings, eventId, body = {}) {
+async function updateEventWithTickets(settings, eventId, body = {}, file = null) {
   const id = String(eventId || "").trim();
   if (!id) throw new EventbriteApiError("event id required", 400);
 
-  const tickets = extractTicketClasses(body);
-  const clean = eventBodyWithoutTickets(body);
+  const { body: withLogo, logo } = await resolveLogoForBody(settings, body, file);
+  const tickets = extractTicketClasses(withLogo);
+  const clean = eventBodyWithoutTickets(withLogo);
   const hasEventPayload =
     (clean.event && typeof clean.event === "object" && Object.keys(clean.event).length > 0) ||
     clean.title != null ||
@@ -371,8 +474,36 @@ async function updateEventWithTickets(settings, eventId, body = {}) {
     ...(event && typeof event === "object" ? event : { id }),
     ticket_classes,
   };
+  if (logo) result.logo = logo;
   if (ticket_errors.length) result.ticket_errors = ticket_errors;
   return result;
+}
+
+/**
+ * GET event with logo (+ ticket_classes) expanded so image URL is returned.
+ */
+async function getEvent(settings, eventId, query = {}) {
+  const id = String(eventId || "").trim();
+  if (!id) throw new EventbriteApiError("event id required", 400);
+
+  const expandParts = String(query.expand || "logo,ticket_classes")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!expandParts.includes("logo")) expandParts.unshift("logo");
+
+  const data = await ebRequest(settings, `events/${id}`, {
+    ...query,
+    expand: expandParts.join(","),
+  });
+
+  // Convenience aliases for FE
+  if (data?.logo) {
+    data.image = data.logo;
+    data.image_url = data.logo.url || data.logo.original?.url || null;
+  }
+
+  return data;
 }
 
 /**
@@ -501,6 +632,9 @@ module.exports = {
   updateTicketClass,
   updateEvent,
   updateEventWithTickets,
+  getEvent,
+  uploadEventLogo,
+  pickLogoFile,
   proxyToEventbrite,
   sanitizeEventbriteEventBody,
   sanitizeEventbriteTicketClassBody,
