@@ -48,6 +48,14 @@ function coverUrl(master) {
   );
 }
 
+function firstMasterTicket(master) {
+  const details = master.detailsJson || master.details;
+  if (!details || typeof details !== "object") return null;
+  const tickets = details.tickets || details.ticket_classes;
+  if (!Array.isArray(tickets) || !tickets.length) return null;
+  return tickets[0] && typeof tickets[0] === "object" ? tickets[0] : null;
+}
+
 /**
  * Push master event fields to each linked channel's remote API.
  * Partial failures are collected — one channel failing does not stop others.
@@ -79,6 +87,7 @@ async function propagateMasterToChannels(userId, master, opts = {}) {
       : null;
   const location = master.locationJson || master.location;
   const cover = coverUrl(master);
+  const masterTicket = firstMasterTicket(master);
 
   for (const ref of refs) {
     const channel = parseChannel(ref.channel);
@@ -113,7 +122,43 @@ async function propagateMasterToChannels(userId, master, opts = {}) {
           endAt,
           timezone,
         });
-        results.eventbrite = { ok: true, eventId, data };
+
+        let ticket = null;
+        const ticketId = String(ref.ticketId || "").trim();
+        if (ticketId) {
+          const tcBody = {};
+          const ticketName =
+            masterTicket?.name ||
+            masterTicket?.title ||
+            masterTicket?.ticket_name ||
+            null;
+          if (ticketName) tcBody.name = String(ticketName);
+
+          const qty =
+            masterTicket?.quantity_total ??
+            masterTicket?.quantity ??
+            masterTicket?.capacity ??
+            capacity;
+          if (qty != null && Number.isFinite(Number(qty))) {
+            tcBody.quantity_total = Number(qty);
+          }
+
+          if (Object.keys(tcBody).length) {
+            ticket = await eventbrite.updateTicketClass(
+              settings,
+              eventId,
+              ticketId,
+              tcBody
+            );
+          }
+        }
+
+        results.eventbrite = {
+          ok: true,
+          eventId,
+          data,
+          ...(ticket ? { ticket } : {}),
+        };
       } else if (channel === "hightribe") {
         const body = {
           title,

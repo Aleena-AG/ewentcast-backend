@@ -20,6 +20,33 @@ function sendEbOk(res, data, status = 200) {
   });
 }
 
+function parseJsonField(value) {
+  if (value == null) return value;
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+/** Normalize multipart FormData (JSON-as-string fields) into a plain body. */
+function normalizeBody(raw = {}) {
+  const body = { ...(raw || {}) };
+  for (const key of ["event", "ticket_classes", "tickets", "crop_mask"]) {
+    if (body[key] != null) body[key] = parseJsonField(body[key]);
+  }
+  return body;
+}
+
 async function listOrganizations(req, res, next) {
   try {
     const settings = await getUserSettings(req.userId);
@@ -34,16 +61,77 @@ async function listOrganizations(req, res, next) {
 async function createOrganizationEvent(req, res, next) {
   try {
     const settings = await getUserSettings(req.userId);
-    const data = await eventbrite.createOrganizationEvent(
+    const body = normalizeBody(req.body || {});
+    const file = eventbrite.pickLogoFile(req.files);
+    const data = await eventbrite.createOrganizationEventWithTickets(
       settings,
       req.params.orgId,
-      req.body || {}
+      body,
+      file
     );
     try {
       await upsertChannelEvents("eventbrite", req.userId, [data], { prune: false });
     } catch {
       /* dashboard mirror is best-effort */
     }
+    sendEbOk(res, data, 201);
+  } catch (err) {
+    if (err.name === "EventbriteApiError") return sendEbError(res, err);
+    next(err);
+  }
+}
+
+async function updateOrganizationEvent(req, res, next) {
+  try {
+    const settings = await getUserSettings(req.userId);
+    const body = normalizeBody(req.body || {});
+    const file = eventbrite.pickLogoFile(req.files);
+    const data = await eventbrite.updateEventWithTickets(
+      settings,
+      req.params.eventId,
+      body,
+      file
+    );
+    try {
+      await upsertChannelEvents("eventbrite", req.userId, [data], { prune: false });
+    } catch {
+      /* dashboard mirror is best-effort */
+    }
+    sendEbOk(res, data);
+  } catch (err) {
+    if (err.name === "EventbriteApiError") return sendEbError(res, err);
+    next(err);
+  }
+}
+
+async function getOrganizationEvent(req, res, next) {
+  try {
+    const settings = await getUserSettings(req.userId);
+    const data = await eventbrite.getEvent(
+      settings,
+      req.params.eventId,
+      req.query || {}
+    );
+    sendEbOk(res, data);
+  } catch (err) {
+    if (err.name === "EventbriteApiError") return sendEbError(res, err);
+    next(err);
+  }
+}
+
+/** Standalone logo upload — returns Eventbrite media object (id, url, …). */
+async function uploadMedia(req, res, next) {
+  try {
+    const settings = await getUserSettings(req.userId);
+    const file = eventbrite.pickLogoFile(req.files);
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: "image file is required (field: logo, image, cover, or file)",
+      });
+    }
+    const body = normalizeBody(req.body || {});
+    const data = await eventbrite.uploadEventLogo(settings, file, body.crop_mask);
     sendEbOk(res, data, 201);
   } catch (err) {
     if (err.name === "EventbriteApiError") return sendEbError(res, err);
@@ -76,11 +164,19 @@ async function proxyEventbrite(req, res, next) {
       req.body
     );
 
-    const status =
-      req.method === "POST" || req.method === "PUT" || req.method === "PATCH"
-        ? 200
-        : 200;
-    sendEbOk(res, data, status);
+    // If proxying a single event GET without expand, enrich with logo when present
+    if (
+      req.method === "GET" &&
+      /^events\/[^/]+\/?$/i.test(path) &&
+      data &&
+      typeof data === "object" &&
+      data.logo
+    ) {
+      data.image = data.logo;
+      data.image_url = data.logo.url || data.logo.original?.url || null;
+    }
+
+    sendEbOk(res, data, 200);
   } catch (err) {
     if (err.name === "EventbriteApiError") return sendEbError(res, err);
     next(err);
@@ -90,5 +186,8 @@ async function proxyEventbrite(req, res, next) {
 module.exports = {
   listOrganizations,
   createOrganizationEvent,
+  updateOrganizationEvent,
+  getOrganizationEvent,
+  uploadMedia,
   proxyEventbrite,
 };

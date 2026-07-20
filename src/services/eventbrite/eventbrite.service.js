@@ -161,25 +161,210 @@ function sanitizeEventbriteTicketClassBody(body) {
   return next;
 }
 
+function extractTicketClasses(body = {}) {
+  const raw = body.ticket_classes ?? body.tickets;
+  if (Array.isArray(raw)) return raw.filter((t) => t && typeof t === "object");
+  return [];
+}
+
+function eventBodyWithoutTickets(body = {}) {
+  const next = { ...(body || {}) };
+  delete next.ticket_classes;
+  delete next.tickets;
+  delete next.crop_mask;
+  return next;
+}
+
+function defaultCropMask() {
+  return {
+    top_left: { x: 1, y: 1 },
+    width: 1280,
+    height: 640,
+  };
+}
+
+function pickLogoFile(files = []) {
+  if (!Array.isArray(files) || !files.length) return null;
+  const preferred = files.find((f) =>
+    /^(logo|image|cover|cover_image|file)$/i.test(String(f.fieldname || ""))
+  );
+  return preferred || files[0] || null;
+}
+
+/**
+ * Eventbrite logo upload (3 steps):
+ * 1) GET media/upload/?type=image-event-logo
+ * 2) POST file to S3 upload_url
+ * 3) POST media/upload with upload_token + crop_mask (2:1)
+ * Returns the media object (id, url, …).
+ */
+async function uploadEventLogo(settings, file, cropMask) {
+  if (!file?.buffer) {
+    throw new EventbriteApiError("image file is required", 400);
+  }
+
+  const instructions = await ebRequest(settings, "media/upload", {
+    type: "image-event-logo",
+  });
+
+  const uploadUrl = String(instructions.upload_url || "").trim();
+  const uploadToken = String(instructions.upload_token || "").trim();
+  const fileParam = String(instructions.file_parameter_name || "file");
+  const uploadData =
+    instructions.upload_data && typeof instructions.upload_data === "object"
+      ? instructions.upload_data
+      : {};
+
+  if (!uploadUrl || !uploadToken) {
+    throw new EventbriteApiError("Eventbrite media upload instructions incomplete", 502);
+  }
+
+  const form = new FormData();
+  for (const [key, value] of Object.entries(uploadData)) {
+    if (value != null) form.append(key, String(value));
+  }
+  const blob = new Blob([file.buffer], {
+    type: file.mimetype || "application/octet-stream",
+  });
+  form.append(fileParam, blob, file.originalname || "event-logo.jpg");
+
+  const uploadRes = await fetch(uploadUrl, { method: "POST", body: form });
+  if (!uploadRes.ok) {
+    const text = await uploadRes.text().catch(() => "");
+    throw new EventbriteApiError(
+      `Eventbrite image upload failed: ${text || uploadRes.status}`,
+      uploadRes.status >= 400 && uploadRes.status < 600 ? uploadRes.status : 502
+    );
+  }
+
+  const mask =
+    cropMask && typeof cropMask === "object" ? cropMask : defaultCropMask();
+
+  const media = await ebRequest(settings, "media/upload", {}, {
+    method: "POST",
+    body: {
+      upload_token: uploadToken,
+      crop_mask: mask,
+    },
+  });
+
+  return media;
+}
+
+async function resolveLogoForBody(settings, body = {}, file = null) {
+  let logo = null;
+  const clean = { ...(body || {}) };
+  const cropMask = clean.crop_mask;
+  delete clean.crop_mask;
+
+  if (file) {
+    logo = await uploadEventLogo(settings, file, cropMask);
+    const logoId = logo?.id != null ? String(logo.id) : "";
+    if (logoId) {
+      if (clean.event && typeof clean.event === "object") {
+        clean.event = { ...clean.event, logo_id: logoId };
+      } else {
+        clean.logo_id = logoId;
+      }
+    }
+  }
+
+  return { body: clean, logo };
+}
+
+function wrapTicketClassBody(ticket) {
+  if (!ticket || typeof ticket !== "object") return { ticket_class: {} };
+  if (ticket.ticket_class && typeof ticket.ticket_class === "object") {
+    return sanitizeEventbriteTicketClassBody(ticket);
+  }
+  const { id, ...fields } = ticket;
+  return sanitizeEventbriteTicketClassBody({ ticket_class: fields });
+}
+
 async function createOrganizationEvent(settings, orgId, body) {
   return ebRequest(settings, `organizations/${orgId}/events`, {}, {
     method: "POST",
-    body: sanitizeEventbriteEventBody(body),
+    body: sanitizeEventbriteEventBody(eventBodyWithoutTickets(body)),
   });
+}
+
+async function createTicketClass(settings, eventId, body) {
+  const id = String(eventId || "").trim();
+  if (!id) throw new EventbriteApiError("event id required", 400);
+  return ebRequest(settings, `events/${id}/ticket_classes`, {}, {
+    method: "POST",
+    body: wrapTicketClassBody(body),
+  });
+}
+
+async function updateTicketClass(settings, eventId, ticketClassId, body) {
+  const eid = String(eventId || "").trim();
+  const tid = String(ticketClassId || "").trim();
+  if (!eid) throw new EventbriteApiError("event id required", 400);
+  if (!tid) throw new EventbriteApiError("ticket class id required", 400);
+  return ebRequest(settings, `events/${eid}/ticket_classes/${tid}`, {}, {
+    method: "POST",
+    body: wrapTicketClassBody(body),
+  });
+}
+
+/**
+ * Create event, then each ticket class (Eventbrite requires separate calls).
+ * Optional multipart logo/image file → upload + set event.logo_id.
+ * Body may include `ticket_classes` / `tickets` alongside `event`.
+ */
+async function createOrganizationEventWithTickets(settings, orgId, body = {}, file = null) {
+  const { body: withLogo, logo } = await resolveLogoForBody(settings, body, file);
+  const tickets = extractTicketClasses(withLogo);
+  const event = await createOrganizationEvent(settings, orgId, withLogo);
+  const eventId = String(event?.id || "").trim();
+
+  const ticket_classes = [];
+  const ticket_errors = [];
+
+  if (eventId && tickets.length) {
+    for (let i = 0; i < tickets.length; i++) {
+      try {
+        const created = await createTicketClass(settings, eventId, tickets[i]);
+        ticket_classes.push(created);
+      } catch (err) {
+        ticket_errors.push({
+          index: i,
+          name: tickets[i]?.name || tickets[i]?.ticket_class?.name || null,
+          error: err instanceof Error ? err.message : String(err),
+          statusCode: err.statusCode || 500,
+        });
+      }
+    }
+  }
+
+  const result = { ...event, ticket_classes };
+  if (logo) result.logo = logo;
+  if (ticket_errors.length) result.ticket_errors = ticket_errors;
+  return result;
 }
 
 /**
  * Update an Eventbrite event (POST /v3/events/:id/).
  * `fields`: { title, description, startAt, endAt, timezone, onlineEvent, listed }
+ * Or pass a full `{ event: { ... } }` body (native Eventbrite shape).
  */
 async function updateEvent(settings, eventId, fields = {}) {
   const id = String(eventId || "").trim();
   if (!id) throw new EventbriteApiError("event id required", 400);
 
+  // Native Eventbrite body: { event: { name, start, … } }
+  if (fields.event && typeof fields.event === "object") {
+    return ebRequest(settings, `events/${id}`, {}, {
+      method: "POST",
+      body: sanitizeEventbriteEventBody({ event: fields.event }),
+    });
+  }
+
   const event = {};
   const title = fields.title || fields.name;
   if (title) {
-    event.name = { html: String(title) };
+    event.name = { html: typeof title === "object" ? title.html || title.text : String(title) };
   }
 
   const description = fields.description || fields.description_html;
@@ -191,6 +376,10 @@ async function updateEvent(settings, eventId, fields = {}) {
     } else {
       event.description = { html: text };
     }
+  }
+  if (fields.summary != null && String(fields.summary).trim() !== "") {
+    event.summary = String(fields.summary);
+    delete event.description;
   }
 
   const timezone = fields.timezone || fields.tz || "UTC";
@@ -215,6 +404,9 @@ async function updateEvent(settings, eventId, fields = {}) {
   if (fields.listed != null) {
     event.listed = !!fields.listed;
   }
+  if (fields.logo_id != null) {
+    event.logo_id = String(fields.logo_id);
+  }
 
   if (!Object.keys(event).length) {
     throw new EventbriteApiError("No Eventbrite fields to update", 400);
@@ -224,6 +416,94 @@ async function updateEvent(settings, eventId, fields = {}) {
     method: "POST",
     body: sanitizeEventbriteEventBody({ event }),
   });
+}
+
+/**
+ * Update event fields and/or ticket classes in one request.
+ * Optional logo/image file → upload + set logo_id.
+ * Ticket with `id` → update; without → create.
+ */
+async function updateEventWithTickets(settings, eventId, body = {}, file = null) {
+  const id = String(eventId || "").trim();
+  if (!id) throw new EventbriteApiError("event id required", 400);
+
+  const { body: withLogo, logo } = await resolveLogoForBody(settings, body, file);
+  const tickets = extractTicketClasses(withLogo);
+  const clean = eventBodyWithoutTickets(withLogo);
+  const hasEventPayload =
+    (clean.event && typeof clean.event === "object" && Object.keys(clean.event).length > 0) ||
+    clean.title != null ||
+    clean.name != null ||
+    clean.description != null ||
+    clean.summary != null ||
+    clean.startAt != null ||
+    clean.start_at != null ||
+    clean.endAt != null ||
+    clean.end_at != null ||
+    clean.timezone != null ||
+    clean.logo_id != null;
+
+  let event = null;
+  if (hasEventPayload) {
+    event = await updateEvent(settings, id, clean);
+  }
+
+  const ticket_classes = [];
+  const ticket_errors = [];
+
+  for (let i = 0; i < tickets.length; i++) {
+    const tc = tickets[i];
+    const tcId = String(tc.id || tc.ticket_class_id || tc.ticket_class?.id || "").trim();
+    try {
+      const result = tcId
+        ? await updateTicketClass(settings, id, tcId, tc)
+        : await createTicketClass(settings, id, tc);
+      ticket_classes.push(result);
+    } catch (err) {
+      ticket_errors.push({
+        index: i,
+        id: tcId || null,
+        name: tc?.name || tc?.ticket_class?.name || null,
+        error: err instanceof Error ? err.message : String(err),
+        statusCode: err.statusCode || 500,
+      });
+    }
+  }
+
+  const result = {
+    ...(event && typeof event === "object" ? event : { id }),
+    ticket_classes,
+  };
+  if (logo) result.logo = logo;
+  if (ticket_errors.length) result.ticket_errors = ticket_errors;
+  return result;
+}
+
+/**
+ * GET event with logo (+ ticket_classes) expanded so image URL is returned.
+ */
+async function getEvent(settings, eventId, query = {}) {
+  const id = String(eventId || "").trim();
+  if (!id) throw new EventbriteApiError("event id required", 400);
+
+  const expandParts = String(query.expand || "logo,ticket_classes")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!expandParts.includes("logo")) expandParts.unshift("logo");
+
+  const data = await ebRequest(settings, `events/${id}`, {
+    ...query,
+    expand: expandParts.join(","),
+  });
+
+  // Convenience aliases for FE
+  if (data?.logo) {
+    data.image = data.logo;
+    data.image_url = data.logo.url || data.logo.original?.url || null;
+  }
+
+  return data;
 }
 
 /**
@@ -347,7 +627,14 @@ module.exports = {
   ebRequest,
   listOrganizations,
   createOrganizationEvent,
+  createOrganizationEventWithTickets,
+  createTicketClass,
+  updateTicketClass,
   updateEvent,
+  updateEventWithTickets,
+  getEvent,
+  uploadEventLogo,
+  pickLogoFile,
   proxyToEventbrite,
   sanitizeEventbriteEventBody,
   sanitizeEventbriteTicketClassBody,
