@@ -161,25 +161,109 @@ function sanitizeEventbriteTicketClassBody(body) {
   return next;
 }
 
+function extractTicketClasses(body = {}) {
+  const raw = body.ticket_classes ?? body.tickets;
+  if (Array.isArray(raw)) return raw.filter((t) => t && typeof t === "object");
+  return [];
+}
+
+function eventBodyWithoutTickets(body = {}) {
+  const next = { ...(body || {}) };
+  delete next.ticket_classes;
+  delete next.tickets;
+  return next;
+}
+
+function wrapTicketClassBody(ticket) {
+  if (!ticket || typeof ticket !== "object") return { ticket_class: {} };
+  if (ticket.ticket_class && typeof ticket.ticket_class === "object") {
+    return sanitizeEventbriteTicketClassBody(ticket);
+  }
+  const { id, ...fields } = ticket;
+  return sanitizeEventbriteTicketClassBody({ ticket_class: fields });
+}
+
 async function createOrganizationEvent(settings, orgId, body) {
   return ebRequest(settings, `organizations/${orgId}/events`, {}, {
     method: "POST",
-    body: sanitizeEventbriteEventBody(body),
+    body: sanitizeEventbriteEventBody(eventBodyWithoutTickets(body)),
   });
+}
+
+async function createTicketClass(settings, eventId, body) {
+  const id = String(eventId || "").trim();
+  if (!id) throw new EventbriteApiError("event id required", 400);
+  return ebRequest(settings, `events/${id}/ticket_classes`, {}, {
+    method: "POST",
+    body: wrapTicketClassBody(body),
+  });
+}
+
+async function updateTicketClass(settings, eventId, ticketClassId, body) {
+  const eid = String(eventId || "").trim();
+  const tid = String(ticketClassId || "").trim();
+  if (!eid) throw new EventbriteApiError("event id required", 400);
+  if (!tid) throw new EventbriteApiError("ticket class id required", 400);
+  return ebRequest(settings, `events/${eid}/ticket_classes/${tid}`, {}, {
+    method: "POST",
+    body: wrapTicketClassBody(body),
+  });
+}
+
+/**
+ * Create event, then each ticket class (Eventbrite requires separate calls).
+ * Body may include `ticket_classes` / `tickets` alongside `event`.
+ */
+async function createOrganizationEventWithTickets(settings, orgId, body = {}) {
+  const tickets = extractTicketClasses(body);
+  const event = await createOrganizationEvent(settings, orgId, body);
+  const eventId = String(event?.id || "").trim();
+
+  const ticket_classes = [];
+  const ticket_errors = [];
+
+  if (eventId && tickets.length) {
+    for (let i = 0; i < tickets.length; i++) {
+      try {
+        const created = await createTicketClass(settings, eventId, tickets[i]);
+        ticket_classes.push(created);
+      } catch (err) {
+        ticket_errors.push({
+          index: i,
+          name: tickets[i]?.name || tickets[i]?.ticket_class?.name || null,
+          error: err instanceof Error ? err.message : String(err),
+          statusCode: err.statusCode || 500,
+        });
+      }
+    }
+  }
+
+  const result = { ...event, ticket_classes };
+  if (ticket_errors.length) result.ticket_errors = ticket_errors;
+  return result;
 }
 
 /**
  * Update an Eventbrite event (POST /v3/events/:id/).
  * `fields`: { title, description, startAt, endAt, timezone, onlineEvent, listed }
+ * Or pass a full `{ event: { ... } }` body (native Eventbrite shape).
  */
 async function updateEvent(settings, eventId, fields = {}) {
   const id = String(eventId || "").trim();
   if (!id) throw new EventbriteApiError("event id required", 400);
 
+  // Native Eventbrite body: { event: { name, start, … } }
+  if (fields.event && typeof fields.event === "object") {
+    return ebRequest(settings, `events/${id}`, {}, {
+      method: "POST",
+      body: sanitizeEventbriteEventBody({ event: fields.event }),
+    });
+  }
+
   const event = {};
   const title = fields.title || fields.name;
   if (title) {
-    event.name = { html: String(title) };
+    event.name = { html: typeof title === "object" ? title.html || title.text : String(title) };
   }
 
   const description = fields.description || fields.description_html;
@@ -191,6 +275,10 @@ async function updateEvent(settings, eventId, fields = {}) {
     } else {
       event.description = { html: text };
     }
+  }
+  if (fields.summary != null && String(fields.summary).trim() !== "") {
+    event.summary = String(fields.summary);
+    delete event.description;
   }
 
   const timezone = fields.timezone || fields.tz || "UTC";
@@ -215,6 +303,9 @@ async function updateEvent(settings, eventId, fields = {}) {
   if (fields.listed != null) {
     event.listed = !!fields.listed;
   }
+  if (fields.logo_id != null) {
+    event.logo_id = String(fields.logo_id);
+  }
 
   if (!Object.keys(event).length) {
     throw new EventbriteApiError("No Eventbrite fields to update", 400);
@@ -224,6 +315,64 @@ async function updateEvent(settings, eventId, fields = {}) {
     method: "POST",
     body: sanitizeEventbriteEventBody({ event }),
   });
+}
+
+/**
+ * Update event fields and/or ticket classes in one request.
+ * Ticket with `id` → update; without → create.
+ */
+async function updateEventWithTickets(settings, eventId, body = {}) {
+  const id = String(eventId || "").trim();
+  if (!id) throw new EventbriteApiError("event id required", 400);
+
+  const tickets = extractTicketClasses(body);
+  const clean = eventBodyWithoutTickets(body);
+  const hasEventPayload =
+    (clean.event && typeof clean.event === "object" && Object.keys(clean.event).length > 0) ||
+    clean.title != null ||
+    clean.name != null ||
+    clean.description != null ||
+    clean.summary != null ||
+    clean.startAt != null ||
+    clean.start_at != null ||
+    clean.endAt != null ||
+    clean.end_at != null ||
+    clean.timezone != null ||
+    clean.logo_id != null;
+
+  let event = null;
+  if (hasEventPayload) {
+    event = await updateEvent(settings, id, clean);
+  }
+
+  const ticket_classes = [];
+  const ticket_errors = [];
+
+  for (let i = 0; i < tickets.length; i++) {
+    const tc = tickets[i];
+    const tcId = String(tc.id || tc.ticket_class_id || tc.ticket_class?.id || "").trim();
+    try {
+      const result = tcId
+        ? await updateTicketClass(settings, id, tcId, tc)
+        : await createTicketClass(settings, id, tc);
+      ticket_classes.push(result);
+    } catch (err) {
+      ticket_errors.push({
+        index: i,
+        id: tcId || null,
+        name: tc?.name || tc?.ticket_class?.name || null,
+        error: err instanceof Error ? err.message : String(err),
+        statusCode: err.statusCode || 500,
+      });
+    }
+  }
+
+  const result = {
+    ...(event && typeof event === "object" ? event : { id }),
+    ticket_classes,
+  };
+  if (ticket_errors.length) result.ticket_errors = ticket_errors;
+  return result;
 }
 
 /**
@@ -347,7 +496,11 @@ module.exports = {
   ebRequest,
   listOrganizations,
   createOrganizationEvent,
+  createOrganizationEventWithTickets,
+  createTicketClass,
+  updateTicketClass,
   updateEvent,
+  updateEventWithTickets,
   proxyToEventbrite,
   sanitizeEventbriteEventBody,
   sanitizeEventbriteTicketClassBody,

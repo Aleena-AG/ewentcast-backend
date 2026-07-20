@@ -271,6 +271,7 @@ const collection = {
     { key: "orgId", value: "" },
     { key: "lumaEventId", value: "evt-sample-001" },
     { key: "ticketTypeId", value: "" },
+    { key: "ticketClassId", value: "" },
     { key: "sessionId", value: "" },
     { key: "webhookLogToken", value: "change-me" },
     { key: "resetToken", value: "" },
@@ -712,7 +713,7 @@ const collection = {
 
     folder(
       "Eventbrite Proxy",
-      "Live Eventbrite v3 via privateToken. Catch-all proxies any EB path.",
+      "Live Eventbrite v3 via privateToken. Create/update accept ticket_classes; catch-all proxies any other EB path.",
       [
         req("List organizations", "GET", "/api/v1/eventbrite/organizations", {
           events: testScript([
@@ -725,7 +726,9 @@ const collection = {
             "}",
           ]),
         }),
-        req("Create organization event", "POST", "/api/v1/eventbrite/organizations/{{orgId}}/events", {
+        req("Create organization event with tickets", "POST", "/api/v1/eventbrite/organizations/{{orgId}}/events", {
+          description:
+            "Creates the Eventbrite event, then each ticket_class (EB requires separate calls). Response includes ticket_classes.",
           body: {
             event: {
               name: { html: "Postman EB Event" },
@@ -739,6 +742,50 @@ const collection = {
               },
               currency: "USD",
             },
+            ticket_classes: [
+              {
+                name: "General Admission",
+                quantity_total: 100,
+                free: true,
+              },
+              {
+                name: "VIP",
+                quantity_total: 20,
+                cost: "USD,5000",
+              },
+            ],
+          },
+          events: testScript([
+            "if (pm.response.code === 200 || pm.response.code === 201) {",
+            "  const j = pm.response.json();",
+            "  const id = j.id || j.data?.id;",
+            "  if (id) pm.collectionVariables.set('externalId', String(id));",
+            "  const tcs = j.ticket_classes || j.data?.ticket_classes || [];",
+            "  if (tcs[0]?.id) pm.collectionVariables.set('ticketClassId', String(tcs[0].id));",
+            "}",
+          ]),
+        }),
+        req("Update event with tickets", "POST", "/api/v1/eventbrite/events/{{externalId}}", {
+          description:
+            "Updates event fields and ticket classes. Ticket with id → update; without id → create.",
+          body: {
+            event: {
+              name: { html: "Postman EB Event (updated)" },
+              summary: "Updated via Postman",
+            },
+            ticket_classes: [
+              {
+                id: "{{ticketClassId}}",
+                name: "General Admission",
+                quantity_total: 120,
+                free: true,
+              },
+              {
+                name: "Early Bird",
+                quantity_total: 30,
+                cost: "USD,2500",
+              },
+            ],
           },
         }),
         req("Proxy: get event", "GET", "/api/v1/eventbrite/events/{{externalId}}/", {
@@ -750,6 +797,25 @@ const collection = {
         }),
         req("Proxy: ticket classes", "GET", "/api/v1/eventbrite/events/{{externalId}}/ticket_classes/", {
           description: "Catch-all proxy → ticket_classes",
+        }),
+        req("Proxy: create ticket class", "POST", "/api/v1/eventbrite/events/{{externalId}}/ticket_classes/", {
+          description: "Catch-all proxy → create a single ticket class",
+          body: {
+            ticket_class: {
+              name: "Standby",
+              quantity_total: 15,
+              free: true,
+            },
+          },
+        }),
+        req("Proxy: update ticket class", "POST", "/api/v1/eventbrite/events/{{externalId}}/ticket_classes/{{ticketClassId}}/", {
+          description: "Catch-all proxy → update a ticket class by id",
+          body: {
+            ticket_class: {
+              name: "General Admission",
+              quantity_total: 150,
+            },
+          },
         }),
       ]
     ),

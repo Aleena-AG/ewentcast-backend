@@ -67,6 +67,10 @@
       "value": ""
     },
     {
+      "key": "ticketClassId",
+      "value": ""
+    },
+    {
       "key": "sessionId",
       "value": ""
     },
@@ -5019,7 +5023,7 @@
     },
     {
       "name": "Eventbrite Proxy",
-      "description": "Live Eventbrite v3 via privateToken. Catch-all proxies any EB path.",
+      "description": "Live Eventbrite v3 via privateToken. Create/update accept ticket_classes; catch-all proxies any other EB path.",
       "item": [
         {
           "name": "List organizations",
@@ -5092,7 +5096,7 @@
           ]
         },
         {
-          "name": "Create organization event",
+          "name": "Create organization event with tickets",
           "request": {
             "method": "POST",
             "header": [
@@ -5119,10 +5123,89 @@
                 "events"
               ]
             },
-            "description": "",
+            "description": "Creates the Eventbrite event, then each ticket_class (EB requires separate calls). Response includes ticket_classes.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"event\": {\n    \"name\": {\n      \"html\": \"Postman EB Event\"\n    },\n    \"start\": {\n      \"timezone\": \"America/Los_Angeles\",\n      \"utc\": \"2026-11-01T18:00:00Z\"\n    },\n    \"end\": {\n      \"timezone\": \"America/Los_Angeles\",\n      \"utc\": \"2026-11-01T21:00:00Z\"\n    },\n    \"currency\": \"USD\"\n  }\n}"
+              "raw": "{\n  \"event\": {\n    \"name\": {\n      \"html\": \"Postman EB Event\"\n    },\n    \"start\": {\n      \"timezone\": \"America/Los_Angeles\",\n      \"utc\": \"2026-11-01T18:00:00Z\"\n    },\n    \"end\": {\n      \"timezone\": \"America/Los_Angeles\",\n      \"utc\": \"2026-11-01T21:00:00Z\"\n    },\n    \"currency\": \"USD\"\n  },\n  \"ticket_classes\": [\n    {\n      \"name\": \"General Admission\",\n      \"quantity_total\": 100,\n      \"free\": true\n    },\n    {\n      \"name\": \"VIP\",\n      \"quantity_total\": 20,\n      \"cost\": \"USD,5000\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});",
+                  "",
+                  "// Request-specific hooks",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  const j = pm.response.json();",
+                  "  const id = j.id || j.data?.id;",
+                  "  if (id) pm.collectionVariables.set('externalId', String(id));",
+                  "  const tcs = j.ticket_classes || j.data?.ticket_classes || [];",
+                  "  if (tcs[0]?.id) pm.collectionVariables.set('ticketClassId', String(tcs[0].id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update event with tickets",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/eventbrite/events/{{externalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventbrite",
+                "events",
+                "{{externalId}}"
+              ]
+            },
+            "description": "Updates event fields and ticket classes. Ticket with id → update; without id → create.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"name\": {\n      \"html\": \"Postman EB Event (updated)\"\n    },\n    \"summary\": \"Updated via Postman\"\n  },\n  \"ticket_classes\": [\n    {\n      \"id\": \"{{ticketClassId}}\",\n      \"name\": \"General Admission\",\n      \"quantity_total\": 120,\n      \"free\": true\n    },\n    {\n      \"name\": \"Early Bird\",\n      \"quantity_total\": 30,\n      \"cost\": \"USD,2500\"\n    }\n  ]\n}"
             }
           },
           "event": [
@@ -5323,6 +5406,151 @@
               ]
             },
             "description": "Catch-all proxy → ticket_classes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Proxy: create ticket class",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/eventbrite/events/{{externalId}}/ticket_classes/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventbrite",
+                "events",
+                "{{externalId}}",
+                "ticket_classes",
+                ""
+              ]
+            },
+            "description": "Catch-all proxy → create a single ticket class",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticket_class\": {\n    \"name\": \"Standby\",\n    \"quantity_total\": 15,\n    \"free\": true\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Proxy: update ticket class",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/eventbrite/events/{{externalId}}/ticket_classes/{{ticketClassId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventbrite",
+                "events",
+                "{{externalId}}",
+                "ticket_classes",
+                "{{ticketClassId}}",
+                ""
+              ]
+            },
+            "description": "Catch-all proxy → update a ticket class by id",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticket_class\": {\n    \"name\": \"General Admission\",\n    \"quantity_total\": 150\n  }\n}"
+            }
           },
           "event": [
             {
