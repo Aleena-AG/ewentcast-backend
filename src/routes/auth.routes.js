@@ -3,6 +3,7 @@ const { requireAuth } = require("../middlewares/requireAuth");
 const {
   register,
   login,
+  hightribeLogin,
   logout,
   me,
   forgotPassword,
@@ -15,6 +16,7 @@ const router = express.Router();
 
 router.post("/register", register);
 router.post("/login", login);
+router.post("/hightribe-login", hightribeLogin);
 router.post("/logout", requireAuth, logout);
 router.get("/me", requireAuth, me);
 router.post("/forgot-password", forgotPassword);

@@ -97,6 +97,14 @@
     {
       "key": "authPassword",
       "value": "Password123!"
+    },
+    {
+      "key": "htEmail",
+      "value": "you@example.com"
+    },
+    {
+      "key": "htPassword",
+      "value": "YOUR_HT_PASSWORD"
     }
   ],
   "item": [
@@ -424,6 +432,99 @@
                   "",
                   "pm.test(\"Status is one of 200\", function () {",
                   "  pm.expect([200]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "// Request-specific hooks",
+                  "let j = {};",
+                  "try { j = pm.response.json() || {}; } catch (e) { j = {}; }",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  const token = j.token || j.data?.token || j.access_token;",
+                  "  if (token) {",
+                  "    pm.collectionVariables.set(\"authToken\", String(token));",
+                  "    console.log(\"authToken updated (\" + String(token).slice(0, 8) + \"…)\");",
+                  "  } else {",
+                  "    console.warn(\"Login/Register OK but no token in body\", Object.keys(j));",
+                  "  }",
+                  "  const user = j.user || j.data?.user;",
+                  "  if (user && user.id) pm.collectionVariables.set(\"userId\", String(user.id));",
+                  "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
+                  "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login with Hightribe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/hightribe-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "hightribe-login"
+              ]
+            },
+            "description": "Public. Signs in (or auto-registers) to Ewentcast via Hightribe email/password. Returns Ewentcast Bearer token + links HT connection.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{htEmail}}\",\n  \"password\": \"{{htPassword}}\",\n  \"serviceUrl\": \"https://api.hightribe.com\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Status is one of 200/201/401/422\", function () {",
+                  "  pm.expect([200, 201, 401, 422]).to.include(pm.response.code);",
                   "});",
                   "",
                   "// Request-specific hooks",
@@ -1021,6 +1122,283 @@
                   "    return;",
                   "  }",
                   "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Admin-only (user.type=admin). List all users + subscriptions. Promote users via PATCH type.",
+      "item": [
+        {
+          "name": "List all users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ]
+            },
+            "description": "Requires type=admin. Returns every user with subscription."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Status is one of 200/403\", function () {",
+                  "  pm.expect([200, 403]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get user by id (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Any user profile (subscription, settings, htConnection)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Status is one of 200/403/404\", function () {",
+                  "  pm.expect([200, 403, 404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List all subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "subscriptions"
+              ]
+            },
+            "description": "All subscriptions with nested user (id, email, name, type)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Status is one of 200/403\", function () {",
+                  "  pm.expect([200, 403]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set user type",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/type",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{userId}}",
+                "type"
+              ]
+            },
+            "description": "Promote/demote: body.type = user | admin. Cannot demote yourself.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"admin\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Status is one of 200/400/403/404/422\", function () {",
+                  "  pm.expect([200, 400, 403, 404, 422]).to.include(pm.response.code);",
                   "});"
                 ]
               }

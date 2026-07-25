@@ -17,6 +17,11 @@ enum AuthSource {
   hightribe
 }
 
+enum UserType {
+  user
+  admin
+}
+
 enum SubscriptionStatus {
   trialing
   active
@@ -29,6 +34,7 @@ model User {
   email            String    @unique(map: "uniq_users_email") @db.VarChar(320)
   name             String    @db.VarChar(255)
   passwordHash     String    @map("password_hash") @db.VarChar(255)
+  type             UserType  @default(user)
   authSource       AuthSource @default(local) @map("auth_source")
   htUserId         String?   @map("ht_user_id") @db.VarChar(64)
   emailVerifiedAt  DateTime? @map("email_verified_at") @db.DateTime(3)
