@@ -713,11 +713,16 @@ const collection = {
       "Live Hightribe API. Login saves token into settings.",
       [
         req("Login Hightribe", "POST", "/api/v1/hightribe/login", {
+          auth: "noauth",
+          expectOk: [200, 201, 401, 422],
+          description:
+            "Public. Same as Auth → Login with Hightribe. Returns Ewentcast Bearer token + links HT.",
           body: {
-            email: "you@example.com",
-            password: "YOUR_HT_PASSWORD",
+            email: "{{htEmail}}",
+            password: "{{htPassword}}",
             serviceUrl: "https://api.hightribe.com",
           },
+          events: testScript(saveAuthScript),
         }),
         req("List Hightribe events", "GET", "/api/v1/hightribe/events", {
           query: [

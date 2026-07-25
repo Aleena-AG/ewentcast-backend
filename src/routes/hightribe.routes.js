@@ -26,9 +26,9 @@ function optionalMultipart(req, res, next) {
   return next();
 }
 
-router.use(requireAuth);
-
 router.post("/login", loginHightribe);
+
+router.use(requireAuth);
 
 router.get("/events/bookings", listHightribeBookings);
 router.get("/events/:id", getHightribeEvent);
