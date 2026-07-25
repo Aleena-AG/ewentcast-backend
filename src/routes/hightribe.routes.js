@@ -3,6 +3,7 @@ const multer = require("multer");
 const { requireAuth } = require("../middlewares/requireAuth");
 const {
   loginHightribe,
+  getHightribeUserByToken,
   createHightribeEvent,
   createHightribeEventWithTickets,
   listHightribeBookings,
@@ -27,6 +28,8 @@ function optionalMultipart(req, res, next) {
 }
 
 router.post("/login", loginHightribe);
+router.post("/user", getHightribeUserByToken);
+router.get("/user", getHightribeUserByToken);
 
 router.use(requireAuth);
 

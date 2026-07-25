@@ -43,6 +43,42 @@ async function loginHightribe(req, res, next) {
   }
 }
 
+/**
+ * Public: pass Hightribe token → return HT user details.
+ * Token via body.token / Authorization Bearer / x-hightribe-token.
+ */
+async function getHightribeUserByToken(req, res, next) {
+  try {
+    const header = req.headers.authorization;
+    const bearer =
+      header && String(header).startsWith("Bearer ")
+        ? String(header).slice(7).trim()
+        : "";
+    const token =
+      req.body?.token ||
+      req.body?.access_token ||
+      req.body?.apiKey ||
+      req.query?.token ||
+      req.headers["x-hightribe-token"] ||
+      bearer ||
+      "";
+
+    const serviceUrl =
+      req.body?.serviceUrl || req.query?.serviceUrl || undefined;
+    const result = await hightribe.fetchUserByToken({ token, serviceUrl });
+    res.json(result);
+  } catch (err) {
+    if (err.name === "HightribeApiError") {
+      return res.status(err.statusCode || 400).json({
+        success: false,
+        status: false,
+        message: err.message,
+      });
+    }
+    next(err);
+  }
+}
+
 async function createHightribeEvent(req, res, next) {
   try {
     const files = Array.isArray(req.files) ? req.files : [];
@@ -354,6 +390,7 @@ async function proxyHightribe(req, res, next) {
 
 module.exports = {
   loginHightribe,
+  getHightribeUserByToken,
   createHightribeEvent,
   createHightribeEventWithTickets,
   listHightribeBookings,

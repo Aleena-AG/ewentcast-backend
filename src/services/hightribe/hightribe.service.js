@@ -375,11 +375,80 @@ async function loginWithPassword({ email, password, serviceUrl }) {
   };
 }
 
+/**
+ * Fetch Hightribe user profile using an HT Bearer token (no Ewentcast session).
+ */
+async function fetchUserByToken({ token, serviceUrl }) {
+  const base = (
+    serviceUrl ||
+    process.env.HT_API_BASE ||
+    "https://api.hightribe.com"
+  ).replace(/\/$/, "");
+
+  const clean = String(token || "")
+    .trim()
+    .replace(/^Bearer\s+/i, "");
+  if (!clean) {
+    throw new HightribeApiError("Hightribe token is required", 422);
+  }
+
+  const paths = ["user", "users/me"];
+  let lastErr = null;
+
+  for (const path of paths) {
+    const res = await fetch(`${base}/api/${path}`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${clean}`,
+      },
+    });
+
+    const text = await res.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { raw: text };
+    }
+
+    if (res.status === 404) {
+      lastErr = new HightribeApiError(`Hightribe route api/${path} not found`, 404);
+      continue;
+    }
+
+    if (!res.ok) {
+      throw new HightribeApiError(
+        htErrorMessage(data, res.status, text),
+        res.status >= 400 && res.status < 600 ? res.status : 400
+      );
+    }
+
+    const nested = data.data && typeof data.data === "object" ? data.data : null;
+    const user =
+      data.user ||
+      nested?.user ||
+      (nested && !Array.isArray(nested) ? nested : null) ||
+      (data && typeof data === "object" && !Array.isArray(data) ? data : null);
+
+    return {
+      success: true,
+      status: true,
+      user: user || data,
+      data: user || data,
+      serviceUrl: base,
+    };
+  }
+
+  throw lastErr || new HightribeApiError("Unable to fetch Hightribe user", 502);
+}
+
 module.exports = {
   HightribeApiError,
   htRequest,
   proxyRequest,
   loginWithPassword,
+  fetchUserByToken,
   createEvent,
   createEventWithTickets,
   updateEvent,
