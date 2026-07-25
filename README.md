@@ -49,7 +49,7 @@ Use discrete DB variables (no `DATABASE_URL` string required):
 | `WEBHOOK_LOG_TOKEN` | Token for `GET /api/v1/webhooks/logs` |
 | `AUTH_EXPOSE_RESET_TOKEN` | Expose reset/verify tokens in API responses (dev) |
 | `AUTH_SESSION_DAYS` | Session length (default `30`) |
-| `EWENTCAST_TRIAL_DAYS` | Trial days on register (default `14`) |
+| `EWENTCAST_TRIAL_DAYS` | Trial days on register (default `7`) |
 
 See `.env.example`.
 
