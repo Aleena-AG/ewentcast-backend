@@ -5,7 +5,7 @@ const { serialize } = require("../utils/serialize");
 const SESSION_DAYS = Number(process.env.AUTH_SESSION_DAYS || 30);
 const RESET_TOKEN_HOURS = Number(process.env.AUTH_RESET_TOKEN_HOURS || 2);
 const VERIFY_TOKEN_HOURS = Number(process.env.AUTH_VERIFY_TOKEN_HOURS || 48);
-const TRIAL_DAYS = Number(process.env.EWENTCAST_TRIAL_DAYS || 14);
+const TRIAL_DAYS = Number(process.env.EWENTCAST_TRIAL_DAYS || 7);
 const EXPOSE_TOKENS =
   process.env.AUTH_EXPOSE_RESET_TOKEN === "true" || process.env.NODE_ENV !== "production";
 const APP_URL = (process.env.APP_URL || "http://api.ewentcast.test").replace(/\/$/, "");
