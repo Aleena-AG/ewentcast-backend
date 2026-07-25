@@ -287,6 +287,7 @@ const collection = {
     { key: "authPassword", value: "Password123!" },
     { key: "htEmail", value: "you@example.com" },
     { key: "htPassword", value: "YOUR_HT_PASSWORD" },
+    { key: "htToken", value: "" },
   ],
   item: [
     folder("Health", "Public health check", [
@@ -722,7 +723,24 @@ const collection = {
             password: "{{htPassword}}",
             serviceUrl: "https://api.hightribe.com",
           },
-          events: testScript(saveAuthScript),
+          events: testScript([
+            ...saveAuthScript,
+            "if (pm.response.code === 200 || pm.response.code === 201) {",
+            "  const j = pm.response.json() || {};",
+            "  const ht = j.hightribe?.token || j.data?.token;",
+            '  // HT token lives in settings after login; use explicit htToken var for /user',
+            "}",
+          ]),
+        }),
+        req("User from Hightribe token", "POST", "/api/v1/hightribe/user", {
+          auth: "noauth",
+          expectOk: [200, 401, 422],
+          description:
+            "Public. Pass Hightribe token → returns HT user details. Also accepts Authorization Bearer or x-hightribe-token.",
+          body: {
+            token: "{{htToken}}",
+            serviceUrl: "https://api.hightribe.com",
+          },
         }),
         req("List Hightribe events", "GET", "/api/v1/hightribe/events", {
           query: [

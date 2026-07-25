@@ -105,6 +105,10 @@
     {
       "key": "htPassword",
       "value": "YOUR_HT_PASSWORD"
+    },
+    {
+      "key": "htToken",
+      "value": ""
     }
   ],
   "item": [
@@ -5137,7 +5141,88 @@
                   "  if (user && user.id) pm.collectionVariables.set(\"userId\", String(user.id));",
                   "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
                   "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
+                  "}",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  const j = pm.response.json() || {};",
+                  "  const ht = j.hightribe?.token || j.data?.token;",
+                  "  // HT token lives in settings after login; use explicit htToken var for /user",
                   "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "User from Hightribe token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/hightribe/user",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "hightribe",
+                "user"
+              ]
+            },
+            "description": "Public. Pass Hightribe token → returns HT user details. Also accepts Authorization Bearer or x-hightribe-token.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{htToken}}\",\n  \"serviceUrl\": \"https://api.hightribe.com\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Response received\", function () {",
+                  "  pm.expect(pm.response).to.exist;",
+                  "  pm.expect(pm.response.code).to.be.a(\"number\");",
+                  "});",
+                  "",
+                  "pm.test(\"Not a server error (status < 500)\", function () {",
+                  "  pm.expect(pm.response.code).to.be.below(500);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time under 60s\", function () {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(60000);",
+                  "});",
+                  "",
+                  "pm.test(\"Body is JSON object or array\", function () {",
+                  "  const text = pm.response.text() || \"\";",
+                  "  if (!text.trim()) {",
+                  "    pm.expect.fail(\"Empty response body\");",
+                  "    return;",
+                  "  }",
+                  "  let parsed;",
+                  "  try { parsed = pm.response.json(); } catch (e) {",
+                  "    pm.expect.fail(\"Response is not valid JSON\");",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(parsed === null || typeof parsed === \"object\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Status is one of 200/401/422\", function () {",
+                  "  pm.expect([200, 401, 422]).to.include(pm.response.code);",
+                  "});"
                 ]
               }
             }
