@@ -1,9 +1,6 @@
 const hightribe = require("../services/hightribe/hightribe.service");
-const {
-  updateUserSettings,
-  upsertHtConnection,
-  toPublicSettingsView,
-} = require("../services/settings.service");
+const { loginWithHightribe } = require("../services/auth.service");
+const { serialize } = require("../utils/serialize");
 const {
   upsertChannelEvents,
   getChannelEvent,
@@ -14,55 +11,25 @@ const {
 } = require("../services/channels/propagate-master.service");
 const prisma = require("../config/db");
 
+/**
+ * Public: Hightribe email/password → Ewentcast session + HT link.
+ * Same behavior as POST /auth/hightribe-login.
+ */
 async function loginHightribe(req, res, next) {
   try {
     const { email, password, serviceUrl } = req.body || {};
-    const result = await hightribe.loginWithPassword({ email, password, serviceUrl });
+    if (!email || !password) {
+      return res.status(422).json({
+        success: false,
+        message: "Email and password are required",
+      });
+    }
 
-    const htEmail = String(
-      result.user?.email || email || ""
-    )
-      .trim()
-      .toLowerCase();
-
-    // Persist token + Hightribe account email
-    const settings = await updateUserSettings(req.userId, {
-      hightribe: {
-        serviceUrl: result.serviceUrl,
-        apiKey: result.token,
-        email: htEmail,
-      },
-    });
-
-    const htUserId =
-      result.user?.id != null
-        ? String(result.user.id)
-        : result.user?.user_id != null
-          ? String(result.user.user_id)
-          : null;
-
-    await upsertHtConnection(req.userId, {
-      htUserId,
-      htToken: result.token,
-    });
-
-    const publicSettings = toPublicSettingsView(settings);
-
-    res.json({
+    const result = await loginWithHightribe({ email, password, serviceUrl });
+    res.status(result.created ? 201 : 200).json({
       success: true,
       status: true,
-      token: result.token,
-      access_token: result.token,
-      apiKey: result.token,
-      email: htEmail || null,
-      user: result.user,
-      message: result.message,
-      settings: publicSettings,
-      data: {
-        token: result.token,
-        email: htEmail || null,
-        user: result.user,
-      },
+      ...serialize(result),
     });
   } catch (err) {
     if (err.name === "HightribeApiError") {
