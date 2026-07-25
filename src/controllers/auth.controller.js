@@ -1,6 +1,7 @@
 const {
   registerUser,
   loginUser,
+  loginWithHightribe,
   requestPasswordReset,
   resetPassword,
   resendVerification,
@@ -42,6 +43,23 @@ async function login(req, res, next) {
 
     const result = await loginUser(email, password);
     res.json({ success: true, ...serialize(result) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function hightribeLogin(req, res, next) {
+  try {
+    const { email, password, serviceUrl } = req.body || {};
+    if (!email || !password) {
+      return res.status(422).json({
+        success: false,
+        message: "Email and password are required",
+      });
+    }
+
+    const result = await loginWithHightribe({ email, password, serviceUrl });
+    res.status(result.created ? 201 : 200).json({ success: true, ...serialize(result) });
   } catch (err) {
     next(err);
   }
@@ -133,6 +151,7 @@ async function verifyEmailHandler(req, res, next) {
 module.exports = {
   register,
   login,
+  hightribeLogin,
   logout,
   me,
   forgotPassword,

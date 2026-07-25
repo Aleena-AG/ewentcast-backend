@@ -2,6 +2,7 @@
 const healthRoutes = require("./health.routes");
 const authRoutes = require("./auth.routes");
 const userRoutes = require("./user.routes");
+const adminRoutes = require("./admin.routes");
 const registryRoutes = require("./registry.routes");
 const eventsRoutes = require("./events.routes");
 const settingsRoutes = require("./settings.routes");
@@ -17,6 +18,7 @@ const router = express.Router();
 router.use("/health", healthRoutes);
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
+router.use("/admin", adminRoutes);
 router.use("/registry", registryRoutes);
 router.use("/events", eventsRoutes);
 router.use("/settings", settingsRoutes);

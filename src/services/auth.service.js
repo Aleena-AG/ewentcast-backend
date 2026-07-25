@@ -1,6 +1,8 @@
 const prisma = require("../config/db");
 const { hashPassword, verifyPassword, newToken } = require("../utils/crypto");
 const { serialize } = require("../utils/serialize");
+const { loginWithPassword, HightribeApiError } = require("./hightribe/hightribe.service");
+const { updateUserSettings, upsertHtConnection } = require("./settings.service");
 
 const SESSION_DAYS = Number(process.env.AUTH_SESSION_DAYS || 30);
 const RESET_TOKEN_HOURS = Number(process.env.AUTH_RESET_TOKEN_HOURS || 2);
@@ -9,6 +11,10 @@ const TRIAL_DAYS = Number(process.env.EWENTCAST_TRIAL_DAYS || 7);
 const EXPOSE_TOKENS =
   process.env.AUTH_EXPOSE_RESET_TOKEN === "true" || process.env.NODE_ENV !== "production";
 const APP_URL = (process.env.APP_URL || "http://api.ewentcast.test").replace(/\/$/, "");
+const HT_DEFAULT_BASE = (process.env.HT_API_BASE || "https://api.hightribe.com").replace(
+  /\/$/,
+  ""
+);
 
 function sessionExpiry() {
   const d = new Date();
@@ -33,6 +39,7 @@ function toUserView(user) {
     id: Number(user.id),
     name: user.name,
     email: user.email,
+    type: user.type || "user",
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : null,
     authSource: user.authSource,
   };
@@ -194,6 +201,112 @@ async function loginUser(email, password) {
   };
 }
 
+/**
+ * Sign in (or auto-register) to Ewentcast using Hightribe email/password.
+ * Also links HT token into settings + ht_connections.
+ */
+async function loginWithHightribe({ email, password, serviceUrl }) {
+  let ht;
+  try {
+    ht = await loginWithPassword({ email, password, serviceUrl });
+  } catch (err) {
+    if (err instanceof HightribeApiError || err.name === "HightribeApiError") {
+      const e = new Error(err.message || "Hightribe login failed");
+      e.statusCode = err.statusCode || 401;
+      throw e;
+    }
+    throw err;
+  }
+
+  const htEmail = String(ht.user?.email || email || "")
+    .trim()
+    .toLowerCase();
+  if (!htEmail) {
+    const err = new Error("Hightribe login succeeded but no email was returned");
+    err.statusCode = 502;
+    throw err;
+  }
+
+  const htUserId =
+    ht.user?.id != null
+      ? String(ht.user.id)
+      : ht.user?.user_id != null
+        ? String(ht.user.user_id)
+        : null;
+
+  const htName = String(
+    ht.user?.name ||
+      ht.user?.full_name ||
+      [ht.user?.first_name, ht.user?.last_name].filter(Boolean).join(" ") ||
+      htEmail.split("@")[0]
+  ).trim();
+
+  let user =
+    (htUserId
+      ? await prisma.user.findFirst({ where: { htUserId } })
+      : null) ||
+    (await prisma.user.findUnique({ where: { email: htEmail } }));
+
+  const isNew = !user;
+
+  if (!user) {
+    const trialEnd = new Date();
+    trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS);
+
+    user = await prisma.user.create({
+      data: {
+        email: htEmail,
+        name: htName || htEmail,
+        // Unusable local password — account is Hightribe-native
+        passwordHash: hashPassword(newToken()),
+        authSource: "hightribe",
+        htUserId,
+        emailVerifiedAt: new Date(),
+        subscription: {
+          create: {
+            plan: "pro_monthly_20",
+            status: "trialing",
+            trialEndsAt: trialEnd,
+          },
+        },
+      },
+    });
+  } else {
+    const patch = {};
+    if (htUserId && user.htUserId !== htUserId) patch.htUserId = htUserId;
+    if (!user.emailVerifiedAt) patch.emailVerifiedAt = new Date();
+    if (Object.keys(patch).length) {
+      user = await prisma.user.update({ where: { id: user.id }, data: patch });
+    }
+  }
+
+  await updateUserSettings(user.id, {
+    hightribe: {
+      serviceUrl: ht.serviceUrl || HT_DEFAULT_BASE,
+      apiKey: ht.token,
+      email: htEmail,
+    },
+  });
+
+  await upsertHtConnection(user.id, {
+    htUserId,
+    htToken: ht.token,
+  });
+
+  const token = await createSession(user.id);
+  return {
+    token,
+    user: toUserView(user),
+    ewentcast: await getAccountView(user.id),
+    hightribe: {
+      connected: true,
+      email: htEmail,
+      user: ht.user || null,
+    },
+    created: isNew,
+  };
+}
+
 async function requestPasswordReset(email) {
   const user = await prisma.user.findUnique({
     where: { email: email.trim().toLowerCase() },
@@ -306,6 +419,7 @@ async function getMe(token) {
 module.exports = {
   registerUser,
   loginUser,
+  loginWithHightribe,
   requestPasswordReset,
   resetPassword,
   resendVerification,

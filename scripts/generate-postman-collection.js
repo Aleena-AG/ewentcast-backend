@@ -285,6 +285,8 @@ const collection = {
     { key: "verifyToken", value: "" },
     { key: "authEmail", value: "demo@ewentcast.test" },
     { key: "authPassword", value: "Password123!" },
+    { key: "htEmail", value: "you@example.com" },
+    { key: "htPassword", value: "YOUR_HT_PASSWORD" },
   ],
   item: [
     folder("Health", "Public health check", [
@@ -313,6 +315,18 @@ const collection = {
           auth: "noauth",
           expectOk: [200],
           body: { email: "{{authEmail}}", password: "{{authPassword}}" },
+          events: testScript(saveAuthScript),
+        }),
+        req("Login with Hightribe", "POST", "/api/v1/auth/hightribe-login", {
+          auth: "noauth",
+          expectOk: [200, 201, 401, 422],
+          description:
+            "Public. Signs in (or auto-registers) to Ewentcast via Hightribe email/password. Returns Ewentcast Bearer token + links HT connection.",
+          body: {
+            email: "{{htEmail}}",
+            password: "{{htPassword}}",
+            serviceUrl: "https://api.hightribe.com",
+          },
           events: testScript(saveAuthScript),
         }),
         req("Me", "GET", "/api/v1/auth/me", {
@@ -363,6 +377,30 @@ const collection = {
       req("List me (users)", "GET", "/api/v1/users"),
       req("Get user by id", "GET", "/api/v1/users/{{userId}}"),
     ]),
+
+    folder(
+      "Admin",
+      "Admin-only (user.type=admin). List all users + subscriptions. Promote users via PATCH type.",
+      [
+        req("List all users", "GET", "/api/v1/admin/users", {
+          expectOk: [200, 403],
+          description: "Requires type=admin. Returns every user with subscription.",
+        }),
+        req("Get user by id (admin)", "GET", "/api/v1/admin/users/{{userId}}", {
+          expectOk: [200, 403, 404],
+          description: "Any user profile (subscription, settings, htConnection).",
+        }),
+        req("List all subscriptions", "GET", "/api/v1/admin/subscriptions", {
+          expectOk: [200, 403],
+          description: "All subscriptions with nested user (id, email, name, type).",
+        }),
+        req("Set user type", "PATCH", "/api/v1/admin/users/{{userId}}/type", {
+          expectOk: [200, 400, 403, 404, 422],
+          description: "Promote/demote: body.type = user | admin. Cannot demote yourself.",
+          body: { type: "admin" },
+        }),
+      ]
+    ),
 
     folder("Dashboard", "Overview KPIs", [
       req("Get dashboard stats", "GET", "/api/v1/dashboard/stats", {
