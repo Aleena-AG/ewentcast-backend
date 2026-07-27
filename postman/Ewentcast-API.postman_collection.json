@@ -5178,7 +5178,7 @@
                 "user"
               ]
             },
-            "description": "Public. Pass Hightribe token → returns HT user details. Also accepts Authorization Bearer or x-hightribe-token.",
+            "description": "Public. Pass Hightribe token → returns HT user details plus an Ewentcast Bearer token for other protected APIs.",
             "auth": {
               "type": "noauth"
             },
@@ -5222,7 +5222,24 @@
                   "",
                   "pm.test(\"Status is one of 200/401/422\", function () {",
                   "  pm.expect([200, 401, 422]).to.include(pm.response.code);",
-                  "});"
+                  "});",
+                  "",
+                  "// Request-specific hooks",
+                  "let j = {};",
+                  "try { j = pm.response.json() || {}; } catch (e) { j = {}; }",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  const token = j.token || j.data?.token || j.access_token;",
+                  "  if (token) {",
+                  "    pm.collectionVariables.set(\"authToken\", String(token));",
+                  "    console.log(\"authToken updated (\" + String(token).slice(0, 8) + \"…)\");",
+                  "  } else {",
+                  "    console.warn(\"Login/Register OK but no token in body\", Object.keys(j));",
+                  "  }",
+                  "  const user = j.user || j.data?.user;",
+                  "  if (user && user.id) pm.collectionVariables.set(\"userId\", String(user.id));",
+                  "  if (j.verifyToken) pm.collectionVariables.set(\"verifyToken\", j.verifyToken);",
+                  "  if (j.resetToken) pm.collectionVariables.set(\"resetToken\", j.resetToken);",
+                  "}"
                 ]
               }
             }
