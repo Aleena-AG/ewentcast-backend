@@ -736,11 +736,12 @@ const collection = {
           auth: "noauth",
           expectOk: [200, 401, 422],
           description:
-            "Public. Pass Hightribe token → returns HT user details. Also accepts Authorization Bearer or x-hightribe-token.",
+            "Public. Pass Hightribe token → returns HT user details plus an Ewentcast Bearer token for other protected APIs.",
           body: {
             token: "{{htToken}}",
             serviceUrl: "https://api.hightribe.com",
           },
+          events: testScript(saveAuthScript),
         }),
         req("List Hightribe events", "GET", "/api/v1/hightribe/events", {
           query: [
