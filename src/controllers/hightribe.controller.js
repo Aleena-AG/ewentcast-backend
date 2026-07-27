@@ -1,5 +1,8 @@
 const hightribe = require("../services/hightribe/hightribe.service");
-const { loginWithHightribe } = require("../services/auth.service");
+const {
+  loginWithHightribe,
+  loginWithHightribeToken,
+} = require("../services/auth.service");
 const { serialize } = require("../utils/serialize");
 const {
   upsertChannelEvents,
@@ -44,7 +47,7 @@ async function loginHightribe(req, res, next) {
 }
 
 /**
- * Public: pass Hightribe token → return HT user details.
+ * Public: pass Hightribe token → return HT user details + Ewentcast token.
  * Token via body.token / Authorization Bearer / x-hightribe-token.
  */
 async function getHightribeUserByToken(req, res, next) {
@@ -65,8 +68,20 @@ async function getHightribeUserByToken(req, res, next) {
 
     const serviceUrl =
       req.body?.serviceUrl || req.query?.serviceUrl || undefined;
-    const result = await hightribe.fetchUserByToken({ token, serviceUrl });
-    res.json(result);
+    const profile = await hightribe.fetchUserByToken({ token, serviceUrl });
+    const auth = await loginWithHightribeToken({ token, serviceUrl });
+    res.json({
+      success: true,
+      status: true,
+      token: auth.token,
+      user: profile.user,
+      data: profile.data,
+      ewentcast: auth.ewentcast,
+      ewentcast_user: auth.user,
+      hightribe: auth.hightribe,
+      created: auth.created,
+      serviceUrl: profile.serviceUrl,
+    });
   } catch (err) {
     if (err.name === "HightribeApiError") {
       return res.status(err.statusCode || 400).json({

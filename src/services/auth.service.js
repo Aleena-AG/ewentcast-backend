@@ -1,7 +1,11 @@
 const prisma = require("../config/db");
 const { hashPassword, verifyPassword, newToken } = require("../utils/crypto");
 const { serialize } = require("../utils/serialize");
-const { loginWithPassword, HightribeApiError } = require("./hightribe/hightribe.service");
+const {
+  loginWithPassword,
+  fetchUserByToken,
+  HightribeApiError,
+} = require("./hightribe/hightribe.service");
 const { updateUserSettings, upsertHtConnection } = require("./settings.service");
 
 const SESSION_DAYS = Number(process.env.AUTH_SESSION_DAYS || 30);
@@ -201,24 +205,8 @@ async function loginUser(email, password) {
   };
 }
 
-/**
- * Sign in (or auto-register) to Ewentcast using Hightribe email/password.
- * Also links HT token into settings + ht_connections.
- */
-async function loginWithHightribe({ email, password, serviceUrl }) {
-  let ht;
-  try {
-    ht = await loginWithPassword({ email, password, serviceUrl });
-  } catch (err) {
-    if (err instanceof HightribeApiError || err.name === "HightribeApiError") {
-      const e = new Error(err.message || "Hightribe login failed");
-      e.statusCode = err.statusCode || 401;
-      throw e;
-    }
-    throw err;
-  }
-
-  const htEmail = String(ht.user?.email || email || "")
+async function upsertHightribeBackedUser({ htUser, htToken, serviceUrl, fallbackEmail = "" }) {
+  const htEmail = String(htUser?.email || fallbackEmail || "")
     .trim()
     .toLowerCase();
   if (!htEmail) {
@@ -228,16 +216,16 @@ async function loginWithHightribe({ email, password, serviceUrl }) {
   }
 
   const htUserId =
-    ht.user?.id != null
-      ? String(ht.user.id)
-      : ht.user?.user_id != null
-        ? String(ht.user.user_id)
+    htUser?.id != null
+      ? String(htUser.id)
+      : htUser?.user_id != null
+        ? String(htUser.user_id)
         : null;
 
   const htName = String(
-    ht.user?.name ||
-      ht.user?.full_name ||
-      [ht.user?.first_name, ht.user?.last_name].filter(Boolean).join(" ") ||
+    htUser?.name ||
+      htUser?.full_name ||
+      [htUser?.first_name, htUser?.last_name].filter(Boolean).join(" ") ||
       htEmail.split("@")[0]
   ).trim();
 
@@ -282,15 +270,15 @@ async function loginWithHightribe({ email, password, serviceUrl }) {
 
   await updateUserSettings(user.id, {
     hightribe: {
-      serviceUrl: ht.serviceUrl || HT_DEFAULT_BASE,
-      apiKey: ht.token,
+      serviceUrl: serviceUrl || HT_DEFAULT_BASE,
+      apiKey: htToken,
       email: htEmail,
     },
   });
 
   await upsertHtConnection(user.id, {
     htUserId,
-    htToken: ht.token,
+    htToken,
   });
 
   const token = await createSession(user.id);
@@ -301,10 +289,66 @@ async function loginWithHightribe({ email, password, serviceUrl }) {
     hightribe: {
       connected: true,
       email: htEmail,
-      user: ht.user || null,
+      token: htToken,
+      user: htUser || null,
     },
     created: isNew,
   };
+}
+
+/**
+ * Sign in (or auto-register) to Ewentcast using Hightribe email/password.
+ * Also links HT token into settings + ht_connections.
+ */
+async function loginWithHightribe({ email, password, serviceUrl }) {
+  let ht;
+  try {
+    ht = await loginWithPassword({ email, password, serviceUrl });
+  } catch (err) {
+    if (err instanceof HightribeApiError || err.name === "HightribeApiError") {
+      const e = new Error(err.message || "Hightribe login failed");
+      e.statusCode = err.statusCode || 401;
+      throw e;
+    }
+    throw err;
+  }
+
+  const htEmail = String(ht.user?.email || email || "")
+    .trim()
+    .toLowerCase();
+  if (!htEmail) {
+    const err = new Error("Hightribe login succeeded but no email was returned");
+    err.statusCode = 502;
+    throw err;
+  }
+
+  return upsertHightribeBackedUser({
+    htUser: ht.user,
+    htToken: ht.token,
+    serviceUrl: ht.serviceUrl,
+    fallbackEmail: htEmail,
+  });
+}
+
+async function loginWithHightribeToken({ token, serviceUrl }) {
+  let ht;
+  try {
+    ht = await fetchUserByToken({ token, serviceUrl });
+  } catch (err) {
+    if (err instanceof HightribeApiError || err.name === "HightribeApiError") {
+      const e = new Error(err.message || "Hightribe token is invalid");
+      e.statusCode = err.statusCode || 401;
+      throw e;
+    }
+    throw err;
+  }
+
+  return upsertHightribeBackedUser({
+    htUser: ht.user,
+    htToken: String(token || "").trim().replace(/^Bearer\s+/i, ""),
+    serviceUrl: ht.serviceUrl,
+    fallbackEmail: ht.user?.email || "",
+  });
 }
 
 async function requestPasswordReset(email) {
@@ -420,6 +464,7 @@ module.exports = {
   registerUser,
   loginUser,
   loginWithHightribe,
+  loginWithHightribeToken,
   requestPasswordReset,
   resetPassword,
   resendVerification,
